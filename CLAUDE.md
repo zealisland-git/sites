@@ -19,8 +19,11 @@ Live address: https://sites.zeal-island.workers.dev/
 3. Add a link to the site on the home page: one `<li><a href="<site-name>/">Title</a></li>`
    in the `#sites` list, newest first. Remove the "No sites yet." line if it is still there.
 4. Commit with a clear message and push to `main`.
-5. After 1–2 minutes, load the page with a web fetch tool (the workspace shell can't reach workers.dev) to confirm it is live, then give
-   the user the URL.
+5. After 1–2 minutes, confirm the page is live, then give the user the URL.
+   `sites.zeal-island.workers.dev` is on the cloud environment's network allowlist, so the
+   workspace shell can reach it (e.g. `curl -sSL https://sites.zeal-island.workers.dev/<site-name>/`),
+   as can a web fetch tool or a headless browser. If a request is refused, check that the domain is
+   still allowed in the environment's network settings.
 
 ## To change a site
 
