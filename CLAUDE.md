@@ -1,12 +1,13 @@
-# sites — many small static websites, one Cloudflare Pages project
+# sites — many small static websites, one Cloudflare project
 
-This repo is connected to Cloudflare Pages (Git integration).
+This repo is connected to Cloudflare (Workers & Pages → `sites`, Git integration).
+Live address: https://sites.zeal-island.workers.dev/
 **Pushing to `main` is the publish step.** There is no other deploy command.
 
-- Only the `public/` folder is published (Cloudflare build output directory = `public`).
+- Only the `public/` folder is published.
   Everything outside it (this file, `README.md`, notes) stays in the repo only.
 - Each site is one folder: `public/<site-name>/index.html` is served at
-  `https://<project>.pages.dev/<site-name>/`.
+  `https://sites.zeal-island.workers.dev/<site-name>/`.
 - `public/index.html` is the home page listing every site.
 
 ## To add a new site
@@ -18,7 +19,7 @@ This repo is connected to Cloudflare Pages (Git integration).
 3. Add a link to the site on the home page: one `<li><a href="<site-name>/">Title</a></li>`
    in the `#sites` list, newest first. Remove the "No sites yet." line if it is still there.
 4. Commit with a clear message and push to `main`.
-5. After 1–2 minutes, load the page with a web fetch tool to confirm it is live, then give
+5. After 1–2 minutes, load the page with a web fetch tool (the workspace shell can't reach workers.dev) to confirm it is live, then give
    the user the URL.
 
 ## To change a site
@@ -42,7 +43,7 @@ Do not touch other sites' folders unless asked.
 
 ## If something goes wrong
 
-- **Deploy status and logs:** Cloudflare dashboard → Workers & Pages → this project →
+- **Deploy status and logs:** Cloudflare dashboard → Workers & Pages → `sites` →
   Deployments. Roll back there, or revert the commit and push again.
 - **Claude can't reach the repo:** the Claude GitHub App on `zealisland-git` must have access
   to this repo (github.com/settings/installations → Claude → Configure).
