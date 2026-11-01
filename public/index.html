@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sites</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f7f6f3;
+      color: #1f1f1f;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #161616; color: #ececec; }
+      a { color: #8ab4f8; }
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 48px 16px; }
+    h1 { margin: 0 0 24px; font-size: 2rem; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 12px 0; border-bottom: 1px solid rgba(127, 127, 127, 0.25); }
+    a { font-size: 1.1rem; }
+    .empty { opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Sites</h1>
+    <!-- One <li> per site, newest first: <li><a href="folder-name/">Site title</a></li> -->
+    <ul id="sites">
+      <li class="empty">No sites yet.</li>
+    </ul>
+  </main>
+</body>
+</html>
