@@ -3,6 +3,7 @@ import { FONTS, FONT_CATEGORIES } from './fonts.js';
 import { parseFont, renderText } from './figlet.js';
 import { createOutput, chipGroup, slider, $, $$, el } from './ui.js';
 import { fitFontSize, COLOR_MODES, swatchCss } from './output.js';
+import { decorate, initDecorations, findCustom, mergeCustomDecos } from './decorations.js';
 
 const fontCache = new Map();
 export function loadFont(file) {
@@ -17,60 +18,6 @@ export function loadFont(file) {
 }
 const byName = new Map(FONTS.map(f => [f.n, f]));
 
-// ---------------------------------------------------------------- frames
-const FRAMES = [
-  { id: 'none', label: 'None' },
-  { id: 'box', label: '┌ Box ┐' },
-  { id: 'round', label: '╭ Round ╮' },
-  { id: 'double', label: '╔ Double ╗' },
-  { id: 'ascii', label: '+ Plain +' },
-  { id: 'stars', label: '* Stars *' },
-  { id: 'sparkle', label: '. * Sparkle' },
-  { id: 'kitty', label: '🐱 Kitty says' },
-  { id: 'bunny', label: '🐰 Bunny' },
-];
-
-function boxed(rows, [tl, t, tr, l, r, bl, b, br], padX = 2, padY = 0) {
-  const W = Math.max(0, ...rows.map(x => x.length));
-  const inner = W + padX * 2;
-  const blank = l + ' '.repeat(inner) + r;
-  const out = [tl + t.repeat(inner) + tr];
-  for (let i = 0; i < padY; i++) out.push(blank);
-  for (const row of rows) out.push(l + ' '.repeat(padX) + row.padEnd(W) + ' '.repeat(padX) + r);
-  for (let i = 0; i < padY; i++) out.push(blank);
-  out.push(bl + b.repeat(inner) + br);
-  return out;
-}
-
-function decorate(rows, frame) {
-  const W = Math.max(0, ...rows.map(x => x.length));
-  switch (frame) {
-    case 'box': return boxed(rows, ['┌', '─', '┐', '│', '│', '└', '─', '┘'], 2, 1);
-    case 'round': return boxed(rows, ['╭', '─', '╮', '│', '│', '╰', '─', '╯'], 2, 1);
-    case 'double': return boxed(rows, ['╔', '═', '╗', '║', '║', '╚', '═', '╝'], 2, 1);
-    case 'ascii': return boxed(rows, ['+', '-', '+', '|', '|', '+', '-', '+'], 2, 1);
-    case 'stars': return boxed(rows, ['*', '*', '*', '*', '*', '*', '*', '*'], 3, 1);
-    case 'sparkle': {
-      const pat = '  .  *  .  +  ';
-      const line = off => (pat.repeat(Math.ceil((W + 8) / pat.length) + 1)).slice(off, off + W + 4);
-      return [line(0), '', ...rows.map(r => '  ' + r), '', line(7)];
-    }
-    case 'kitty': {
-      const body = rows.length === 1 ? ['< ' + rows[0].padEnd(W) + ' >'] : rows.map((r, i) => {
-        const [l, rr] = i === 0 ? ['/', '\\'] : i === rows.length - 1 ? ['\\', '/'] : ['|', '|'];
-        return l + ' ' + r.padEnd(W) + ' ' + rr;
-      });
-      return [' ' + '_'.repeat(W + 2), ...body, ' ' + '-'.repeat(W + 2), '    \\', '     \\  /\\_/\\', '       ( o.o )', '        > ^ <'];
-    }
-    case 'bunny': {
-      const sign = boxed(rows, ['.', '-', '.', '|', '|', "'", '-', "'"], 2, 0);
-      const sp = ' '.repeat(Math.max(0, Math.floor((W + 6) / 2) - 8));
-      return [...sign, sp + '       ||', sp + ' (\\_/) ||', sp + ' (o.o) ||', sp + ' / >  \\/'];
-    }
-    default: return rows;
-  }
-}
-
 // ---------------------------------------------------------------- tab
 const DEFAULTS = { text: 'Hello!', font: 'Standard', layout: 'default', align: 'left', width: 80, frame: 'none', color: 'ink' };
 
@@ -78,6 +25,8 @@ export function initTextTab() {
   let state = { ...DEFAULTS };
   try { Object.assign(state, JSON.parse(localStorage.getItem('aas-text') || '{}')); } catch { /* ignore */ }
   if (!byName.has(state.font)) state.font = 'Standard';
+  if (String(state.frame).startsWith('c:') && !findCustom(state.frame)) state.frame = 'none';
+  let draftDeco = null; // decoration being edited (live preview)
   const persist = () => { try { localStorage.setItem('aas-text', JSON.stringify(state)); } catch { /* ignore */ } };
 
   const root = $('#tab-text');
@@ -88,7 +37,7 @@ export function initTextTab() {
     kind: 'text',
     maxFont: 22,
     emptyHtml: '<pre class="ph-art"> /\\_/\\\n( o.o )  type something!\n > ^ <</pre>',
-    getSave: () => ({ title: state.text.trim().split('\n')[0].slice(0, 40) || 'Words', settings: { ...state } }),
+    getSave: () => ({ title: state.text.trim().split('\n')[0].slice(0, 40) || 'Words', settings: { ...state, deco: findCustom(state.frame) ? { ...findCustom(state.frame) } : undefined } }),
   });
 
   // ---- render
@@ -102,7 +51,7 @@ export function initTextTab() {
       const font = await loadFont(f.f);
       if (id !== renderId) return;
       let rows = renderText(font, state.text, { layout: state.layout, width: state.width > 200 ? 0 : state.width, align: state.align });
-      rows = decorate(rows, state.frame);
+      rows = decorate(rows, state.frame, draftDeco);
       const text = rows.map(r => r.replace(/\s+$/, '')).join('\n');
       out.set({ text, color: state.color === 'original' ? 'ink' : state.color });
     } catch {
@@ -122,7 +71,12 @@ export function initTextTab() {
     { id: 'center', html: '<span aria-hidden="true">↔</span>', aria: 'Center', title: 'Center' },
     { id: 'right', html: '<span aria-hidden="true">⇥</span>', aria: 'Align right', title: 'Align right' },
   ], state.align, v => update({ align: v }), { cls: 'seg' });
-  const frame = chipGroup($('#tFrame'), FRAMES, state.frame, v => update({ frame: v }));
+  const frame = initDecorations({
+    chips: $('#tFrame'), actions: $('#tDecoActions'), editor: $('#tDecoEditor'),
+    getFrame: () => state.frame,
+    onSelect: v => update({ frame: v }),
+    onDraft: d => { draftDeco = d; render(); },
+  });
   const colorItems = COLOR_MODES.filter(c => c.id !== 'original').map(c => ({ id: c.id, title: c.label, aria: c.label, html: `<i class="dot" style="background:${swatchCss(c.id)}"></i><span>${c.label}</span>` }));
   const color = chipGroup($('#tColor'), colorItems, state.color, v => update({ color: v }), { cls: 'chip color-chip' });
   const width = slider($('#tWidth'), $('#tWidthOut'), v => (v > 200 ? 'No limit' : v + ' letters'), v => update({ width: v }));
@@ -231,8 +185,12 @@ export function initTextTab() {
 
   return {
     apply(settings) {
-      state = { ...DEFAULTS, ...settings };
+      const { deco, ...rest } = settings || {};
+      if (deco) mergeCustomDecos([deco]);
+      state = { ...DEFAULTS, ...rest };
       if (!byName.has(state.font)) state.font = 'Standard';
+      if (String(state.frame).startsWith('c:') && !findCustom(state.frame)) state.frame = 'none';
+      frame.refresh();
       ta.value = state.text;
       layout.set(state.layout); align.set(state.align); frame.set(state.frame); color.set(state.color); width.set(state.width);
       persist(); render(); buildList(); schedulePreviews();

@@ -1,5 +1,6 @@
 // "My art" gallery: saved pieces live in this browser (IndexedDB).
 import { $, el, toast, pop } from './ui.js';
+import { getCustomDecos, mergeCustomDecos } from './decorations.js';
 import { ArtView, paintPre, fitFontSize, THEMES, getTheme, copyText, downloadPng, downloadTxt, makeShareLink, artSize } from './output.js';
 
 // ---------------------------------------------------------------- storage
@@ -172,7 +173,7 @@ export function initGallery({ onRemix, onCount }) {
 
   // ---- backup
   $('#gExport').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify({ app: 'ascii-art-studio', version: 1, exported: new Date().toISOString(), items }, null, 0)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ app: 'ascii-art-studio', version: 1, exported: new Date().toISOString(), items, decorations: getCustomDecos() }, null, 0)], { type: 'application/json' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `my-ascii-art-${new Date().toISOString().slice(0, 10)}.json` });
     document.body.append(a); a.click(); setTimeout(() => a.remove(), 1000);
     toast('Backup file downloaded 💾');
@@ -190,8 +191,9 @@ export function initGallery({ onRemix, onCount }) {
         await store.put({ ...it, id: it.id || newId(), created: it.created || Date.now() });
         n++;
       }
+      const nd = mergeCustomDecos(data && data.decorations);
       await load();
-      toast(`Imported ${n} piece${n === 1 ? '' : 's'} 🎉`);
+      toast(`Imported ${n} piece${n === 1 ? '' : 's'}${nd ? ` and ${nd} decoration${nd === 1 ? '' : 's'}` : ''} 🎉`);
     } catch { toast('That file is not an ASCII Art Studio backup.'); }
   });
 

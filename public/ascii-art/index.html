@@ -66,6 +66,67 @@
         <div class="field">
           <span class="lbl">Decorate</span>
           <div class="chips" id="tFrame"></div>
+          <div class="chips deco-actions" id="tDecoActions"></div>
+        </div>
+
+        <div class="deco-editor" id="tDecoEditor" hidden>
+          <div class="deco-head">
+            <strong id="dcTitle">✨ Make your own</strong>
+            <button type="button" class="icon-btn sm" data-deco="close" aria-label="Close the decoration maker" title="Close">✕</button>
+          </div>
+          <p class="muted small">Type any characters into the boxes. The preview updates as you type.</p>
+
+          <div class="field">
+            <label class="lbl" for="dcName">Name</label>
+            <input type="text" id="dcName" maxlength="24" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="field">
+            <span class="lbl">Border</span>
+            <div class="border-grid">
+              <input type="text" data-k="tl" maxlength="12" aria-label="Top-left corner" title="Top-left corner" spellcheck="false" autocomplete="off">
+              <input type="text" data-k="t" maxlength="12" aria-label="Top edge (repeats)" title="Top edge (repeats across)" placeholder="top" spellcheck="false" autocomplete="off">
+              <input type="text" data-k="tr" maxlength="12" aria-label="Top-right corner" title="Top-right corner" spellcheck="false" autocomplete="off">
+              <input type="text" data-k="l" maxlength="12" aria-label="Left side" title="Left side" placeholder="left" spellcheck="false" autocomplete="off">
+              <span class="bg-mid" aria-hidden="true">your words</span>
+              <input type="text" data-k="r" maxlength="12" aria-label="Right side" title="Right side" placeholder="right" spellcheck="false" autocomplete="off">
+              <input type="text" data-k="bl" maxlength="12" aria-label="Bottom-left corner" title="Bottom-left corner" spellcheck="false" autocomplete="off">
+              <input type="text" data-k="b" maxlength="12" aria-label="Bottom edge (repeats)" title="Bottom edge (repeats across)" placeholder="bottom" spellcheck="false" autocomplete="off">
+              <input type="text" data-k="br" maxlength="12" aria-label="Bottom-right corner" title="Bottom-right corner" spellcheck="false" autocomplete="off">
+            </div>
+            <span class="muted small">Quick start:</span>
+            <div class="chips" id="dcPresets"></div>
+          </div>
+
+          <div class="field two">
+            <div class="field">
+              <label class="lbl" for="dcPadX">Space at sides <output id="dcPadXOut"></output></label>
+              <input type="range" id="dcPadX" min="0" max="8" value="2">
+            </div>
+            <div class="field">
+              <label class="lbl" for="dcPadY">Space above &amp; below <output id="dcPadYOut"></output></label>
+              <input type="range" id="dcPadY" min="0" max="4" value="1">
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="lbl" for="dcArt">Little picture <small class="muted">(optional)</small></label>
+            <div class="chips" id="dcStamps"></div>
+            <textarea id="dcArt" class="mono" rows="4" placeholder="Draw your own with letters, e.g.  (=^.^=)" spellcheck="false"></textarea>
+            <div class="row">
+              <div class="segs" id="dcPos" aria-label="Where the picture goes"></div>
+              <div class="segs" id="dcAlign" aria-label="Line up the picture"></div>
+            </div>
+          </div>
+
+          <p class="hint" id="dcHint" hidden>Heads up: emoji and some symbols are double-width, so edges may not line up perfectly. Plain keyboard characters work best.</p>
+
+          <div class="row">
+            <button type="button" class="btn btn-primary" data-deco="save">💾 Save decoration</button>
+            <button type="button" class="btn" data-deco="cancel">Cancel</button>
+            <span class="grow"></span>
+            <button type="button" class="btn btn-danger sm" data-deco="delete" hidden>🗑️ Delete</button>
+          </div>
         </div>
         <details class="more">
           <summary>🎛️ Spacing &amp; layout</summary>
