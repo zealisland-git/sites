@@ -94,8 +94,15 @@ let startTab = location.hash.slice(1);
 if (!TABS.includes(startTab)) { try { startTab = localStorage.getItem('aas-tab') || 'text'; } catch { startTab = 'text'; } }
 showTab(startTab);
 
-// ---- shared links (#art=...)
+// ---- shared links (#art=... for one piece, #sync=CODE to join a collection)
 async function checkShare() {
+  const sync = /^#sync=([0-9A-Za-z-]{16,24})$/.exec(location.hash);
+  if (sync) {
+    go('gallery');
+    gallery.offerJoin(sync[1]);
+    toast('Someone shared a sync code with you. Press Join to see their art here.', { ms: 5000 });
+    return;
+  }
   if (!location.hash.startsWith('#art=')) return;
   const art = await readShareLink(location.hash);
   if (art) gallery.openShared(art);

@@ -1,6 +1,8 @@
-// "My art" gallery: saved pieces live in this browser (IndexedDB).
-import { $, el, toast, pop } from './ui.js';
+// "My art" gallery: saved pieces live in this browser (IndexedDB) and are
+// backed up / synced to the site's database by cloud.js.
+import { $, $$, el, toast, pop } from './ui.js';
 import { getCustomDecos, mergeCustomDecos } from './decorations.js';
+import { createCloud, formatCode, normalizeCode, ITEM_ID } from './cloud.js';
 import { ArtView, paintPre, fitFontSize, THEMES, getTheme, copyText, downloadPng, downloadTxt, makeShareLink, artSize } from './output.js';
 
 // ---------------------------------------------------------------- storage
@@ -46,16 +48,8 @@ const store = {
       lsWrite(list);
     }
   },
-  async del(id) {
-    try {
-      const db = await openDb();
-      await new Promise((res, rej) => {
-        const t = db.transaction(STORE, 'readwrite');
-        t.objectStore(STORE).delete(id);
-        t.oncomplete = res; t.onerror = () => rej(t.error);
-      });
-    } catch { lsWrite(lsAll().filter(x => x.id !== id)); }
-  },
+  // keep a tiny "deleted" marker so the deletion can sync to other devices
+  async del(id) { await store.put({ id, deleted: true, updated: Date.now() }); },
 };
 
 // ---------------------------------------------------------------- gallery UI
@@ -63,11 +57,13 @@ const KIND = { text: { icon: 'Aa', label: 'Words' }, picture: { icon: '🖼️',
 
 export function initGallery({ onRemix, onCount }) {
   let items = [];
+  const cloud = createCloud({ all: () => store.all(), put: it => store.put(it) }, () => load());
+  const changed = () => cloud.schedule();
   const grid = $('#gGrid'), search = $('#gSearch');
   const count = () => { onCount(items.length); $('#gTotal').textContent = items.length ? `${items.length} saved` : ''; };
 
   async function load() {
-    items = (await store.all()).sort((a, b) => b.created - a.created);
+    items = (await store.all()).filter(it => !it.deleted && typeof it.text === 'string').sort((a, b) => b.created - a.created);
     count();
     draw();
   }
@@ -145,8 +141,9 @@ export function initGallery({ onRemix, onCount }) {
   $('#vTitle').addEventListener('change', async () => {
     if (!current || !current.id) return;
     current.title = $('#vTitle').value.trim().slice(0, 60) || 'Untitled';
+    current.updated = Date.now();
     await store.put(current);
-    draw();
+    draw(); changed();
     toast('Renamed ✏️');
   });
   $('#vCopy').addEventListener('click', async e => { if (await copyText(current.text)) { toast('Copied! ✨'); pop(e.currentTarget); } });
@@ -162,8 +159,8 @@ export function initGallery({ onRemix, onCount }) {
     const gone = current;
     await store.del(gone.id);
     items = items.filter(x => x.id !== gone.id);
-    dlg.close(); count(); draw();
-    toast('Deleted', { action: 'Undo', onAction: async () => { await store.put(gone); await load(); }, ms: 5000 });
+    dlg.close(); count(); draw(); changed();
+    toast('Deleted', { action: 'Undo', onAction: async () => { await store.put({ ...gone, updated: Date.now() }); await load(); changed(); }, ms: 5000 });
   });
   $('#vSaveShared').addEventListener('click', async () => {
     const { id, ...rest } = current;
@@ -188,20 +185,23 @@ export function initGallery({ onRemix, onCount }) {
       let n = 0;
       for (const it of list || []) {
         if (!it || typeof it.text !== 'string') continue;
-        await store.put({ ...it, id: it.id || newId(), created: it.created || Date.now() });
+        const { deleted, ...rest } = it;
+        await store.put({ ...rest, id: ITEM_ID.test(it.id || '') ? it.id : newId(), created: it.created || Date.now(), updated: Date.now() });
         n++;
       }
       const nd = mergeCustomDecos(data && data.decorations);
-      await load();
+      await load(); changed();
       toast(`Imported ${n} piece${n === 1 ? '' : 's'}${nd ? ` and ${nd} decoration${nd === 1 ? '' : 's'}` : ''} 🎉`);
     } catch { toast('That file is not an ASCII Art Studio backup.'); }
   });
 
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   async function save(art) {
+    const now = Date.now();
     const item = {
       id: newId(),
-      created: Date.now(),
+      created: now,
+      updated: now,
       kind: art.kind,
       title: (art.title || 'Untitled').slice(0, 60),
       text: art.text,
@@ -220,11 +220,96 @@ export function initGallery({ onRemix, onCount }) {
       return;
     }
     items.unshift(item);
-    count(); draw();
+    count(); draw(); changed();
     const badge = $('#galleryCount'); pop(badge);
     toast('Saved to My art ⭐', { action: 'View', onAction: () => { location.hash = 'gallery'; } });
   }
 
-  load();
-  return { save, openShared, refresh: draw };
+  // ---- cloud panel
+  const ui = {
+    status: $('#gCloudStatus'), noCode: $('#gCloudNoCode'), withCode: $('#gCloudCode'), hiddenCode: $('#gCloudHidden'),
+    codeText: $('#gCodeText'), join: $('#gJoinForm'), joinInput: $('#gJoinInput'), leave: $('#gLeaveRow'), panel: $('#gCloud'),
+  };
+  const ago = t => {
+    const s = Math.round((Date.now() - t) / 1000);
+    return s < 45 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : new Date(t).toLocaleDateString();
+  };
+  let cs = cloud.state;
+  function paintCloud(st = cs) {
+    cs = st;
+    const off = st.status === 'off';
+    ui.panel.dataset.status = st.status;
+    let msg;
+    if (st.status === 'syncing') msg = 'Syncing…';
+    else if (st.status === 'ok') msg = `Backed up · synced ${ago(st.lastSync)}` + (st.devices > 1 ? ` · shared by ${st.devices} devices` : '');
+    else if (st.status === 'offline') msg = 'Offline. Your art is safe on this device and will sync when you are back online.';
+    else if (off) msg = st.message || 'Cloud sync is not available. Your art is saved on this device.';
+    else if (st.status === 'error') msg = (st.message || 'Sync failed.') + ' It will try again.';
+    else msg = 'Connecting…';
+    if (st.skipped) msg += ` · ${st.skipped} piece${st.skipped === 1 ? ' is' : 's are'} too big to sync`;
+    ui.status.textContent = msg;
+    const hasCodeHere = st.hasCode && st.codeKnown && st.code;
+    ui.noCode.hidden = off || st.hasCode;
+    ui.withCode.hidden = off || !hasCodeHere;
+    ui.hiddenCode.hidden = off || !st.hasCode || hasCodeHere;
+    if (hasCodeHere) ui.codeText.textContent = formatCode(st.code);
+    ui.leave.hidden = off || st.devices < 2;
+    if (off) ui.join.hidden = true;
+  }
+  cloud.onChange(paintCloud);
+  setInterval(() => { if (cs.status === 'ok') paintCloud(); }, 30_000);
+
+  const busy = async (btn, fn) => {
+    btn.disabled = true;
+    try { await fn(); } catch (e) { toast(e.message || 'Something went wrong.'); } finally { btn.disabled = false; }
+  };
+  const syncLink = code => location.origin + location.pathname + '#sync=' + normalizeCode(code);
+  $('#gSyncNow').addEventListener('click', e => busy(e.currentTarget, async () => { await cloud.sync(); if (cloud.state.status === 'ok') toast('All synced ☁️'); }));
+  $('#gMakeCode').addEventListener('click', e => busy(e.currentTarget, async () => {
+    await cloud.sync();
+    const code = await cloud.createCode();
+    toast('Here is your sync code 🔑 Keep it safe!');
+    ui.codeText.textContent = formatCode(code);
+  }));
+  $$('[data-newcode]').forEach(b => b.addEventListener('click', e => busy(e.currentTarget, async () => {
+    if (!confirm('Make a new sync code?\n\nThe old code will stop working. Devices that already joined stay connected.')) return;
+    await cloud.createCode();
+    toast('New sync code made 🔑');
+  })));
+  $('#gCodeOff').addEventListener('click', e => busy(e.currentTarget, async () => {
+    if (!confirm('Turn off the sync code?\n\nNobody new can join with it. Devices that already joined stay connected.')) return;
+    await cloud.removeCode();
+    toast('Sync code turned off');
+  }));
+  $('#gCopyCode').addEventListener('click', async e => { if (cs.code && await copyText(formatCode(cs.code))) { toast('Sync code copied 🔑'); pop(e.currentTarget); } });
+  $('#gCopyCodeLink').addEventListener('click', async e => { if (cs.code && await copyText(syncLink(cs.code))) { toast('Sync link copied 🔗 Open it on the other device.'); pop(e.currentTarget); } });
+  $$('[data-entercode]').forEach(b => b.addEventListener('click', () => openJoin('')));
+  $('#gJoinCancel').addEventListener('click', () => { ui.join.hidden = true; });
+  function openJoin(code) {
+    ui.join.hidden = false;
+    ui.joinInput.value = code ? formatCode(code) : '';
+    $('#gJoinNote').textContent = items.length
+      ? `The ${items.length} piece${items.length === 1 ? '' : 's'} on this device will be added to that collection too.`
+      : 'You will see the art from that collection here.';
+    requestAnimationFrame(() => { ui.join.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); (code ? $('#gJoinBtn') : ui.joinInput).focus({ preventScroll: true }); });
+  }
+  ui.join.addEventListener('submit', e => {
+    e.preventDefault();
+    const code = normalizeCode(ui.joinInput.value);
+    if (code.length !== 16) { toast('A sync code has 16 letters and numbers, like ABCD-EFGH-JKMN-PQRS.'); ui.joinInput.focus(); return; }
+    busy($('#gJoinBtn'), async () => {
+      await cloud.join(code);
+      ui.join.hidden = true;
+      await load();
+      toast(`Joined! You now see the same art as the other device${cloud.state.devices > 2 ? 's' : ''} ☁️`);
+    });
+  });
+  $('#gLeave').addEventListener('click', e => busy(e.currentTarget, async () => {
+    if (!confirm('Leave this shared collection?\n\nThis device keeps a copy of the art, but it will stop syncing with the other devices.')) return;
+    await cloud.leave();
+    toast('This device now has its own collection again');
+  }));
+
+  load().then(() => cloud.sync());
+  return { save, openShared, refresh: draw, offerJoin: openJoin };
 }

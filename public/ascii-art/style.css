@@ -465,6 +465,24 @@ label.btn { position: relative; }
 .gtitle { flex: 1; font: 600 15px var(--font-fun); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gdate { font-size: 12px; color: var(--muted); padding: 0 6px 2px; font-weight: 700; }
 
+/* cloud sync panel */
+.cloud { border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; background: linear-gradient(135deg, color-mix(in srgb, var(--purple) 9%, var(--card-2)), var(--card-2)); box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.cloud-top { display: flex; align-items: center; gap: 12px; }
+.cloud-ico { font-size: 26px; line-height: 1; }
+.cloud[data-status=syncing] .cloud-ico { animation: bob 1.2s ease-in-out infinite; }
+.cloud[data-status=offline] .cloud-ico, .cloud[data-status=off] .cloud-ico, .cloud[data-status=error] .cloud-ico { filter: grayscale(1); opacity: .6; }
+.cloud-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.cloud-text strong { font: 600 16px var(--font-fun); }
+.cloud-body { display: flex; flex-direction: column; gap: 10px; }
+.cloud-body p, .cloud-join p { margin: 0; }
+.code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sync-code { font: 700 clamp(17px, 2.4vw, 22px) var(--font-art); letter-spacing: .06em; padding: 8px 14px; border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 2px var(--sun); user-select: all; }
+.cloud-join { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1.5px dashed var(--line-2); }
+.cloud-join input { max-width: 260px; font: 700 16px var(--font-art); letter-spacing: .05em; text-transform: uppercase; }
+.cloud-leave { margin: 0; }
+.linklike { border: 0; background: none; padding: 0; color: var(--muted); font: 700 13px var(--font-ui); text-decoration: underline; cursor: pointer; }
+.linklike:hover { color: var(--danger); }
+
 /* ------------------------------------------------------------ viewer dialog */
 dialog#viewer { border: 0; padding: 0; background: transparent; width: min(1080px, 94vw); max-height: 94vh; color: var(--ink); }
 dialog#viewer::backdrop { background: rgba(29, 21, 52, .45); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }

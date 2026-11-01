@@ -308,7 +308,7 @@
         <div class="gallery-head">
           <div>
             <h2>⭐ My art <small class="muted" id="gTotal"></small></h2>
-            <p class="muted small">Saved in this browser on this device. Use <b>Backup</b> to keep a copy or move it to another device.</p>
+            <p class="muted small">Saved on this device and backed up to the cloud automatically. <b>💾 Backup</b> also gives you a file copy.</p>
           </div>
           <div class="row" id="gTools" hidden>
             <input type="search" id="gSearch" placeholder="Search by name…" aria-label="Search saved art">
@@ -316,6 +316,60 @@
           </div>
           <label class="btn sm">📂 Restore<input type="file" id="gImport" accept="application/json,.json" hidden></label>
         </div>
+
+        <section class="cloud" id="gCloud" aria-labelledby="gCloudTitle" data-status="idle">
+          <div class="cloud-top">
+            <span class="cloud-ico" aria-hidden="true">☁️</span>
+            <div class="cloud-text">
+              <strong id="gCloudTitle">Cloud sync</strong>
+              <span class="muted small" id="gCloudStatus" role="status">Connecting…</span>
+            </div>
+            <button type="button" class="icon-btn sm" id="gSyncNow" aria-label="Sync now" title="Sync now">⟳</button>
+          </div>
+
+          <div class="cloud-body" id="gCloudNoCode">
+            <p class="small">Your art syncs for <b>this device</b> automatically. To get it on another device, or share it with someone, make a sync code.</p>
+            <div class="row">
+              <button type="button" class="btn btn-primary sm" id="gMakeCode">🔑 Make a sync code</button>
+              <button type="button" class="btn sm" data-entercode>⌨️ I have a code</button>
+            </div>
+          </div>
+
+          <div class="cloud-body" id="gCloudCode" hidden>
+            <span class="lbl">Your sync code</span>
+            <div class="code-row">
+              <code class="sync-code" id="gCodeText"></code>
+              <button type="button" class="btn sm" id="gCopyCode">📋 Copy</button>
+              <button type="button" class="btn sm" id="gCopyCodeLink">🔗 Copy link</button>
+            </div>
+            <p class="muted small">Type it on another device (My art → ⌨️ I have a code), or open the link there. <b>Anyone with this code can see, add and delete art here</b>, so only share it with people you trust.</p>
+            <div class="row">
+              <button type="button" class="btn sm" data-newcode>↻ New code</button>
+              <button type="button" class="btn sm" id="gCodeOff">Turn off code</button>
+              <button type="button" class="btn sm" data-entercode>⌨️ Use a different code</button>
+            </div>
+          </div>
+
+          <div class="cloud-body" id="gCloudHidden" hidden>
+            <p class="small">This collection has a sync code that was made on another device. Look it up there, or make a new one here (the old code will stop working).</p>
+            <div class="row">
+              <button type="button" class="btn sm" data-newcode>🔑 Make a new code</button>
+              <button type="button" class="btn sm" data-entercode>⌨️ Use a different code</button>
+            </div>
+          </div>
+
+          <form class="cloud-join" id="gJoinForm" hidden>
+            <label class="lbl" for="gJoinInput">Enter a sync code</label>
+            <div class="row">
+              <input type="text" id="gJoinInput" placeholder="ABCD-EFGH-JKMN-PQRS" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+              <button type="submit" class="btn btn-primary sm" id="gJoinBtn">Join</button>
+              <button type="button" class="btn sm" id="gJoinCancel">Cancel</button>
+            </div>
+            <p class="muted small" id="gJoinNote"></p>
+          </form>
+
+          <p class="small cloud-leave" id="gLeaveRow" hidden><button type="button" class="linklike" id="gLeave">Leave this shared collection</button></p>
+        </section>
         <div class="g-empty" id="gEmpty">
 <pre class="ph-art" aria-hidden="true">   /\_/\
   ( -.- )  zzz...
@@ -333,7 +387,7 @@
   </main>
 
   <footer class="foot">
-    <p>Everything happens in your browser. Pictures and art never leave your device unless you share them.</p>
+    <p>Art is made in your browser. Saved pieces sync to this site's database so you can get them back; photos you turn into art stay on your device.</p>
     <p class="muted small">Fonts from the FIGlet collection (via figlet.js) · made with ♥ and a lot of <code>#</code></p>
   </footer>
 
