@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ASCII Art Studio</title>
+  <meta name="description" content="Turn words, pictures and doodles into ASCII art.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ff7eb6'/%3E%3Ctext x='32' y='42' font-family='monospace' font-size='26' font-weight='700' text-anchor='middle' fill='%23fff'%3E=%5E.%5E=%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@400&family=Nunito:wght@500;700;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    try {
+      var m = localStorage.getItem('aas-ui');
+      document.documentElement.dataset.theme = m || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    } catch (e) { /* storage blocked */ }
+  </script>
+</head>
+<body>
+  <div class="blobs" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="top">
+    <a class="brand" href="#text" aria-label="ASCII Art Studio home">
+      <pre class="mascot" id="mascot" aria-hidden="true"></pre>
+      <span>
+        <span class="brand-name">ASCII Art Studio</span>
+        <span class="tagline">Turn words, pictures &amp; doodles into text art</span>
+      </span>
+    </a>
+    <button type="button" class="icon-btn" id="uiThemeBtn" aria-label="Switch to dark mode">🌙</button>
+  </header>
+
+  <div class="tabbar">
+  <nav class="tabs" role="tablist" aria-label="What do you want to make?">
+    <button type="button" role="tab" data-tab="text" aria-controls="tab-text"><span class="tab-ico" aria-hidden="true">Aa</span><span>Words</span></button>
+    <button type="button" role="tab" data-tab="picture" aria-controls="tab-picture"><span class="tab-ico" aria-hidden="true">🖼️</span><span>Picture</span></button>
+    <button type="button" role="tab" data-tab="doodle" aria-controls="tab-doodle"><span class="tab-ico" aria-hidden="true">✏️</span><span>Doodle</span></button>
+    <button type="button" role="tab" data-tab="gallery" aria-controls="tab-gallery"><span class="tab-ico" aria-hidden="true">⭐</span><span>My art</span><span class="badge" id="galleryCount" hidden>0</span></button>
+  </nav>
+  </div>
+
+  <main>
+    <!-- ============================== WORDS ============================== -->
+    <section class="panel layout-text" id="tab-text" role="tabpanel" aria-label="Words" hidden>
+      <div class="side">
+      <div class="card controls area-input">
+        <label class="step" for="tText"><b>1</b> Type your words</label>
+        <textarea id="tText" rows="2" maxlength="400" placeholder="Type something cute…" spellcheck="false"></textarea>
+        <div class="font-now">
+          <span class="muted">Font</span>
+          <strong id="tFontName">Standard</strong>
+          <button type="button" class="icon-btn sm" id="fontPrev" aria-label="Previous font" title="Previous font">‹</button>
+          <button type="button" class="icon-btn sm" id="fontNext" aria-label="Next font" title="Next font">›</button>
+          <button type="button" class="btn sm" id="fontRandom" title="Pick a random font">🎲 Random</button>
+        </div>
+      </div>
+
+      <div class="card controls area-opts">
+        <span class="step"><b>3</b> Make it pretty</span>
+        <div class="field">
+          <span class="lbl">Color</span>
+          <div class="chips" id="tColor"></div>
+        </div>
+        <div class="field">
+          <span class="lbl">Decorate</span>
+          <div class="chips" id="tFrame"></div>
+        </div>
+        <details class="more">
+          <summary>🎛️ Spacing &amp; layout</summary>
+          <div class="field">
+            <span class="lbl">Letter spacing</span>
+            <div class="segs" id="tLayout"></div>
+          </div>
+          <div class="field">
+            <span class="lbl">Line up</span>
+            <div class="segs" id="tAlign"></div>
+          </div>
+          <div class="field">
+            <label class="lbl" for="tWidth">Wrap lines at <output id="tWidthOut"></output></label>
+            <input type="range" id="tWidth" min="20" max="210" step="10" value="80">
+          </div>
+        </details>
+      </div>
+      </div>
+
+      <div class="area-out" data-output="text"></div>
+
+      <div class="card area-fonts">
+        <div class="fonts-head">
+          <span class="step"><b>2</b> Pick a font <small class="muted" id="fontCount"></small></span>
+          <input type="search" id="fontSearch" placeholder="Search fonts…" aria-label="Search fonts">
+        </div>
+        <div class="chips cats" id="fontCats"></div>
+        <div class="font-list" id="fontList"></div>
+      </div>
+    </section>
+
+    <!-- ============================== PICTURE ============================== -->
+    <section class="panel layout-split" id="tab-picture" role="tabpanel" aria-label="Picture" hidden>
+      <div class="card controls area-input">
+        <span class="step"><b>1</b> Choose a picture</span>
+        <input type="file" id="pFile" accept="image/*" hidden>
+
+        <div class="dropzone" id="pDrop">
+          <div class="dz-art" aria-hidden="true">📷</div>
+          <p class="dz-title">Drop a picture here</p>
+          <p class="muted small">or paste one with <kbd>Ctrl</kbd>+<kbd>V</kbd></p>
+          <div class="row center">
+            <button type="button" class="btn btn-primary" data-pick>📁 Choose photo</button>
+            <button type="button" class="btn" data-camera>🎥 Camera</button>
+          </div>
+          <p class="muted small try">No picture? Try one:</p>
+          <div class="samples" id="pSamples"></div>
+        </div>
+
+        <div class="source" id="pSource" hidden>
+          <canvas id="pThumb" width="160" height="120" aria-hidden="true"></canvas>
+          <div class="source-info">
+            <strong id="pName">Picture</strong>
+            <span class="muted small" id="pDims"></span>
+            <div class="row">
+              <button type="button" class="btn sm" data-pick>🔄 Change</button>
+              <button type="button" class="btn sm" data-camera>🎥 Camera</button>
+              <button type="button" class="icon-btn sm" id="pClear" aria-label="Remove picture" title="Remove picture">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="source live" id="pLive" hidden>
+          <span class="rec" aria-hidden="true"></span>
+          <div class="source-info">
+            <strong>Live camera</strong>
+            <span class="muted small">Strike a pose!</span>
+            <div class="row">
+              <button type="button" class="btn btn-primary sm" id="pSnap">📸 Snap</button>
+              <button type="button" class="btn sm" id="pStop">Stop</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card controls area-opts">
+        <span class="step"><b>2</b> Pick a style</span>
+        <div class="style-grid" id="pStyles"></div>
+        <p class="muted small tip" id="pStyleTip"></p>
+
+        <div class="field">
+          <label class="lbl" for="pWidth">Size <output id="pWidthOut"></output></label>
+          <input type="range" id="pWidth" min="20" max="300" step="2" value="100">
+        </div>
+        <div class="field">
+          <span class="lbl">Color</span>
+          <div class="chips" id="pColor"></div>
+        </div>
+        <div class="field" id="pCustomRow" hidden>
+          <label class="lbl" for="pChars">Your characters <small class="muted">(light → dark, or a word)</small></label>
+          <input type="text" id="pChars" maxlength="40" value="♥" autocomplete="off">
+          <label class="check"><input type="checkbox" id="pPattern"> Repeat them like a pattern</label>
+        </div>
+
+        <details class="more">
+          <summary>🎛️ Fine-tune</summary>
+          <div class="field">
+            <label class="lbl" for="pBright">Brightness <output id="pBrightOut"></output></label>
+            <input type="range" id="pBright" min="-100" max="100" value="0">
+          </div>
+          <div class="field">
+            <label class="lbl" for="pContrast">Contrast <output id="pContrastOut"></output></label>
+            <input type="range" id="pContrast" min="-100" max="100" value="10">
+          </div>
+          <div class="field">
+            <label class="lbl" for="pDetail"><span id="pDetailLbl">Detail</span> <output id="pDetailOut"></output></label>
+            <input type="range" id="pDetail" min="0" max="100" value="25">
+          </div>
+          <div class="field" id="pOutlineRow">
+            <label class="lbl" for="pOutline">Outlines <output id="pOutlineOut"></output></label>
+            <input type="range" id="pOutline" min="0" max="100" value="50">
+          </div>
+          <div class="field" id="pCrispRow">
+            <label class="lbl" for="pCrisp">Sharp edges <output id="pCrispOut"></output></label>
+            <input type="range" id="pCrisp" min="0" max="100" value="45">
+          </div>
+          <div class="field">
+            <span class="lbl">Dithering</span>
+            <div class="segs" id="pDither"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="pAuto" checked> Auto-balance light and dark</label>
+          <label class="check"><input type="checkbox" id="pInvert"> Swap light and dark</label>
+          <button type="button" class="btn sm" id="pReset">↺ Reset fine-tuning</button>
+        </details>
+      </div>
+      <div class="area-out" data-output="picture"></div>
+    </section>
+
+    <!-- ============================== DOODLE ============================== -->
+    <section class="panel layout-doodle" id="tab-doodle" role="tabpanel" aria-label="Doodle" hidden>
+      <div class="card area-pad">
+        <div class="pad-head">
+          <span class="step"><b>1</b> Draw anything</span>
+          <div class="row">
+            <button type="button" class="icon-btn" id="dUndo" aria-label="Undo" title="Undo (Ctrl+Z)">↶</button>
+            <button type="button" class="icon-btn" id="dRedo" aria-label="Redo" title="Redo (Ctrl+Y)">↷</button>
+            <button type="button" class="icon-btn" id="dMirror" aria-label="Mirror drawing" aria-pressed="false" title="Mirror: draw both sides at once">🦋</button>
+            <button type="button" class="icon-btn" id="dClear" aria-label="Clear the page" title="Clear the page">🗑️</button>
+          </div>
+        </div>
+        <div class="toolbar" id="dTools"></div>
+        <div class="toolbar2">
+          <div class="paints" id="dColors"></div>
+          <label class="size-ctl" title="Brush size">
+            <span class="size-dot-box" aria-hidden="true"><i id="dSizeDot"></i></span>
+            <input type="range" id="dSize" min="2" max="60" value="8" aria-label="Brush size">
+          </label>
+        </div>
+        <div class="pad-wrap" id="dWrap">
+          <canvas id="dCanvas" aria-label="Drawing pad"></canvas>
+          <canvas id="dOverlay" aria-hidden="true"></canvas>
+          <div class="mirror-line" id="dMirrorLine" hidden></div>
+          <div class="brush-cursor" id="dCursor" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="card controls area-opts">
+          <span class="step"><b>2</b> Choose the look</span>
+          <div class="chips" id="dStyle"></div>
+          <div class="field">
+            <label class="lbl" for="dWidth">Size <output id="dWidthOut"></output></label>
+            <input type="range" id="dWidth" min="20" max="200" step="2" value="80">
+          </div>
+          <div class="field">
+            <span class="lbl">Color</span>
+            <div class="chips" id="dColor"></div>
+          </div>
+          <div class="field" id="dCustomRow" hidden>
+            <label class="lbl" for="dChars">Your characters <small class="muted">(light → dark, or a word)</small></label>
+            <input type="text" id="dChars" maxlength="40" autocomplete="off">
+            <label class="check"><input type="checkbox" id="dPattern"> Repeat them like a pattern</label>
+          </div>
+      </div>
+      <div class="area-out" data-output="doodle"></div>
+    </section>
+
+    <!-- ============================== GALLERY ============================== -->
+    <section class="panel" id="tab-gallery" role="tabpanel" aria-label="My art" hidden>
+      <div class="card gallery-card">
+        <div class="gallery-head">
+          <div>
+            <h2>⭐ My art <small class="muted" id="gTotal"></small></h2>
+            <p class="muted small">Saved in this browser on this device. Use <b>Backup</b> to keep a copy or move it to another device.</p>
+          </div>
+          <div class="row" id="gTools" hidden>
+            <input type="search" id="gSearch" placeholder="Search by name…" aria-label="Search saved art">
+            <button type="button" class="btn sm" id="gExport">💾 Backup</button>
+          </div>
+          <label class="btn sm">📂 Restore<input type="file" id="gImport" accept="application/json,.json" hidden></label>
+        </div>
+        <div class="g-empty" id="gEmpty">
+<pre class="ph-art" aria-hidden="true">   /\_/\
+  ( -.- )  zzz...
+   > ^ <   nothing saved yet</pre>
+          <p>Make something, then press <b>⭐ Save</b>. It will wait for you here.</p>
+          <div class="row center">
+            <button type="button" class="btn btn-primary" data-go="text">Aa Write words</button>
+            <button type="button" class="btn" data-go="picture">🖼️ Use a picture</button>
+            <button type="button" class="btn" data-go="doodle">✏️ Doodle</button>
+          </div>
+        </div>
+        <div class="g-grid" id="gGrid"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Everything happens in your browser. Pictures and art never leave your device unless you share them.</p>
+    <p class="muted small">Fonts from the FIGlet collection (via figlet.js) · made with ♥ and a lot of <code>#</code></p>
+  </footer>
+
+  <dialog id="viewer" aria-labelledby="vTitle">
+    <div class="viewer-card">
+      <div class="viewer-head">
+        <input type="text" id="vTitle" maxlength="60" aria-label="Name" spellcheck="false">
+        <button type="button" class="icon-btn" id="vClose" aria-label="Close">✕</button>
+      </div>
+      <p class="muted small" id="vMeta"></p>
+      <div class="viewport" id="vViewport"></div>
+      <div class="out-actions">
+        <button type="button" class="btn btn-primary" id="vCopy">📋 Copy</button>
+        <button type="button" class="btn btn-sun" id="vSaveShared" hidden>⭐ Save to My art</button>
+        <button type="button" class="btn" id="vPng">🖼️ Image</button>
+        <button type="button" class="btn" id="vTxt">📄 .txt</button>
+        <button type="button" class="btn" id="vLink">🔗 Link</button>
+        <button type="button" class="btn" id="vRemix">✏️ Edit again</button>
+        <span class="grow"></span>
+        <button type="button" class="btn btn-danger" id="vDelete">🗑️ Delete</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="drop-overlay" id="dropOverlay" hidden><div>🖼️<br>Drop your picture!</div></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
