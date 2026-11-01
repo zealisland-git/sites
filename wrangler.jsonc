@@ -1,5 +1,3 @@
-// DRAFT: not used by Cloudflare under this name. Once the D1 database exists, put its ID below
-// and rename this file to wrangler.jsonc (that is what turns the API on).
 // Cloudflare Worker "sites": static files from public/ + a small API under /api/.
 // See CLAUDE.md ("Server code") before changing anything here.
 {
@@ -16,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "sites-db",
-      "database_id": "PASTE-DATABASE-ID-HERE"
+      "database_id": "903a9552-f74c-4f16-8840-3fbd829ba9ba"
     }
   ],
   "observability": { "enabled": true }
