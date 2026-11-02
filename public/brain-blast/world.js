@@ -65,7 +65,7 @@ const hash2 = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ 
 class Fighter {
   constructor(g, heroId, team, o) {
     this.g = g; this.hero = heroId; this.def = HEROES[heroId]; this.team = team;
-    this.isPlayer = !!o.player; this.name = o.name; this.r = 24;
+    this.isPlayer = !!o.player; this.name = o.name; this.r = 24 * (this.def.scale || 1); this.baseHp = this.def.hp; this.dmgScale = 1;
     this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
     this.power = 0; this.maxHp = this.def.hp; this.hp = this.maxHp;
     this.ammo = 3; this.super = 0; this.aim = team === 1 ? Math.PI / 2 : -Math.PI / 2; this.face = this.aim;
@@ -77,13 +77,16 @@ class Fighter {
     this.sprite = document.createElement('canvas'); this.spriteZoom = 0;
     this.spawn = { x: 0, y: 0 };
   }
-  get mult() { return 1 + 0.1 * this.power; }
+  get mult() { return (1 + 0.1 * this.power) * this.dmgScale; }
 }
 
 class Game {
   constructor(o) {
-    this.mode = o.mode; this.level = o.level; this.ui = o.ui;
-    const def = MAPS[this.mode]; this.theme = THEMES[def.theme];
+    this.mode = o.mode; this.level = o.level; this.ui = o.ui; this.stage = o.stage || null;
+    this.kind = this.stage ? this.stage.type : this.mode;
+    const sm = this.stage && this.stage.map, def = sm ? (typeof sm === 'string' ? MAPS[sm] : sm) : MAPS[this.mode];
+    this.theme = THEMES[(this.stage && this.stage.theme) || def.theme] || THEMES.canyon;
+    this.marks = { P: [], E: [], M: [], K: [] };
     const rows = expandRows(def); this.h = rows.length; this.w = rows[0].length;
     const n = this.w * this.h;
     this.tile = new Uint8Array(n); this.bush = new Uint8Array(n); this.crateHp = new Float32Array(n); this.tshake = new Float32Array(n);
@@ -93,6 +96,7 @@ class Game {
       if (c === '#') this.tile[i] = TL.WALL; else if (c === '=') this.tile[i] = TL.BLOCK; else if (c === '~') this.tile[i] = TL.WATER;
       else if (c === 'C') { this.tile[i] = TL.CRATE; this.crateHp[i] = CRATE_HP; this.crateHome.push(i); }
       else if (c === 'B') this.bush[i] = 1;
+      else if (this.marks[c]) this.marks[c].push({ x: (x + 0.5) * T, y: (y + 0.5) * T });
     }
     this.tileVer = 0; this.flowCache = new Map(); this.crateRespawn = [];
     this.time = 0; this.phase = 'intro'; this.introT = 3.4; this.paused = false; this.over = false;
@@ -100,13 +104,20 @@ class Game {
     this.input = { mx: 0, my: 0, aim: null, aimDist: 0, fireHeld: false, fire: false, autoFire: false, sup: false, autoSup: false, show: 0, mouse: false };
     this.cam = { x: 0, y: 0, s: 1, shake: 0 }; this.vw = 800; this.vh = 600;
     this.brainCD = 0; this.secondUsed = false; this.quizCount = 0; this.gemId = 0;
+    const S = this.stage || {};
+    this.playTime = 0; this.traps = 0; this.solved = 0; this.kills = 0; this.shieldCD = 0;
     this.makeTeams(o.heroId);
-    if (this.mode === 'grab') {
-      this.mine = { x: (this.w / 2) * T, y: (this.h / 2) * T }; this.mineT = 2;
-      this.rule = BBMath.pickRule(this.level, null); this.ruleT = 35; this.ruleLen = 35;
-      this.clock = 150; this.lead = -1; this.cd = 15;
-    } else {
-      this.safe = { x0: 0, y0: 0, x1: this.w * T, y1: this.h * T }; this.poisonTick = 0;
+    this.gemsOn = this.mode === 'grab' || this.kind === 'gems';
+    if (this.gemsOn) {
+      const m = this.marks.M[0]; this.mine = m ? { x: m.x, y: m.y } : { x: (this.w / 2) * T, y: (this.h / 2) * T }; this.mineT = 2;
+      this.ruleLv = S.ruleLevel || this.level; this.ruleNames = S.rules || null;
+      this.ruleLen = S.ruleTime || 35; this.ruleT = this.ruleLen; this.rule = BBMath.pickRule(this.ruleLv, null, this.ruleNames);
+    }
+    if (this.mode === 'grab') { this.clock = S.time || 150; this.lead = -1; this.cd = 15; }
+    else if (this.mode === 'royale') { this.safe = { x0: 0, y0: 0, x1: this.w * T, y1: this.h * T }; this.poisonTick = 0; }
+    else {
+      this.clock = S.time || 0; this.lives = S.lives || 3; this.waveIdx = -1; this.waveT = 1.2; this.swarmT = 2;
+      if (S.boss) { const k = this.marks.K[0] || { x: this.w * T / 2, y: 3 * T }; this.boss = this.spawnEnemy(Object.assign({ skill: 0.5 }, S.boss), k, true); }
     }
     const p = this.player; this.cam.x = p.x; this.cam.y = p.y;
   }
@@ -114,7 +125,13 @@ class Game {
   // ---------- setup ----------
   makeTeams(heroId) {
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
-    const tro = Save.d.trophies, skill = clamp(0.42 + tro / 600, 0.42, 0.85);
+    const tro = Save.d.trophies, skill = this.stage && this.stage.skill != null ? this.stage.skill : clamp(0.42 + tro / 600, 0.42, 0.85);
+    if (this.mode === 'solo') {
+      const f = new Fighter(this, heroId, 0, { player: true, name: 'YOU' }), ps = this.marks.P[0] || { x: this.w * T / 2, y: (this.h - 1.5) * T };
+      f.spawn = { x: ps.x, y: ps.y }; f.x = ps.x; f.y = ps.y; f.aim = f.face = -Math.PI / 2;
+      this.player = f; this.fighters.push(f); this.aliveCount = 1; this.names = names;
+      return;
+    }
     const botHero = () => choice(HERO_ORDER);
     if (this.mode === 'grab') {
       const cx = Math.floor(this.w / 2), sp = [[cx - 2, this.h - 2], [cx, this.h - 2], [cx + 2, this.h - 2]];
@@ -140,6 +157,42 @@ class Game {
     }
     for (const f of this.fighters) { f.x = f.spawn.x; f.y = f.spawn.y; if (this.mode === 'royale') f.aim = f.face = Math.atan2(this.h * T / 2 - f.y, this.w * T / 2 - f.x); }
     this.aliveCount = this.fighters.length;
+  }
+  // stage enemies: spec = { hero, n, hp (x health), dmg (x damage), skill, name }
+  spawnEnemy(spec, at, quiet) {
+    const heroId = spec.hero === 'random' || !HEROES[spec.hero] ? choice(HERO_ORDER) : spec.hero, H = HEROES[heroId];
+    const nm = spec.name || (H.minion || H.boss ? H.name : (this.names && this.names.pop()) || H.name);
+    const f = new Fighter(this, heroId, 1, { name: nm });
+    const pts = at ? [at] : this.marks.E.length ? this.marks.E : [{ x: this.w * T / 2, y: 1.5 * T }];
+    const p0 = choice(pts), spot = this.nearestOpen(p0.x + rand(-18, 18), p0.y + rand(-18, 18));
+    f.x = f.spawn.x = spot.x; f.y = f.spawn.y = spot.y;
+    f.baseHp = Math.round(H.hp * (spec.hp || 1)); f.maxHp = f.hp = f.baseHp; f.dmgScale = spec.dmg || 1;
+    f.aim = f.face = Math.atan2(this.player.y - f.y, this.player.x - f.x);
+    const sk = spec.skill != null ? spec.skill : this.stage && this.stage.skill != null ? this.stage.skill : 0.45;
+    f.bot = H.boss ? new BossAI(this, f, spec) : new Bot(this, f, sk, 'solo');
+    f.invuln = quiet ? 0 : 1;
+    if (!quiet) this.puff(f.x, f.y, 8, 'rgba(255,120,120,0.85)');
+    this.fighters.push(f);
+    return f;
+  }
+  enemiesLeft() { let n = 0; for (const f of this.fighters) if (f.alive && f.team !== this.player.team) n++; return n; }
+  waveTotal() { const S = this.stage; return S && S.waves ? S.waves.reduce((a, w) => a + w.reduce((b, s) => b + (s.n || 1), 0), 0) : 0; }
+  objective() {
+    const S = this.stage; if (!S || this.mode !== 'solo') return null;
+    if (S.type === 'defeat') return { ico: '🤖', txt: 'DEFEAT THE ROBOTS', cur: Math.min(this.kills, this.waveTotal()), goal: this.waveTotal() };
+    if (S.type === 'gems') return { ico: '💎', txt: 'HOLD GEMS', cur: this.player.gems, goal: S.goal };
+    if (S.type === 'cubes') return { ico: '🧊', txt: 'SOLVE BRAIN CUBES', cur: this.solved, goal: S.goal };
+    if (S.type === 'survive') return { ico: '⏱️', txt: 'SURVIVE!', cur: Math.min(S.time, Math.floor(S.time - this.clock)), goal: S.time };
+    if (S.type === 'boss') return { ico: '👑', txt: 'DEFEAT THE BOSS', cur: 0, goal: 0 };
+    return null;
+  }
+  breakShield() {
+    const b = this.boss; if (!b || !b.alive) return;
+    b.shield = false; b.shieldT = (this.stage.boss && this.stage.boss.shieldTime) || 8; b.stun = 1.6;
+    this.cam.shake = 10; Sound.play('boom', 0.7);
+    for (let k = 0; k < 26; k++) { const a = rand(0, TAU), s = rand(150, 420); this.parts.push({ type: 'spark', x: b.x, y: b.y - 50, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.5, max: 0.5, size: 4, color: '#9ffcff' }); }
+    this.parts.push({ type: 'ring', x: b.x, y: b.y, life: 0.5, max: 0.5, size: 3 * T, color: '#9ffcff' });
+    this.ui.banner('SHIELD BROKEN!', `Attack now! It comes back in ${b.shieldT} seconds`, '#9ffcff', 2);
   }
   setView(W, H) {
     this.vw = W; this.vh = H;
@@ -181,12 +234,14 @@ class Game {
     if (this.phase === 'intro') {
       const before = Math.ceil(this.introT - 0.4); this.introT -= dt; const after = Math.ceil(this.introT - 0.4);
       if (after !== before && after > 0) { this.ui.banner(String(after), '', '#fff', 0.8, true); Sound.play('tick'); }
-      if (this.introT <= 0.4 && before > 0) { this.ui.banner('GO!', this.mode === 'grab' ? 'Grab gems that match the rule!' : 'Break crates, solve, survive!', '#ffd23f', 1.3, true); Sound.play('go'); }
+      if (this.introT <= 0.4 && before > 0) { this.ui.banner('GO!', this.stage && this.stage.goalText ? this.stage.goalText : this.mode === 'grab' ? 'Grab gems that match the rule!' : 'Break crates, solve, survive!', '#ffd23f', 1.3, true); Sound.play('go'); }
       if (this.introT <= 0) this.phase = 'play';
       this.updateCamera(dt); this.updateFx(dt);
       return;
     }
     if (this.brainCD > 0) this.brainCD -= dt;
+    if (this.shieldCD > 0) this.shieldCD -= dt;
+    if (!this.ending) this.playTime += dt;
     for (const f of this.fighters) {
       let it;
       if (!f.alive) { this.updateDead(f, dt); continue; }
@@ -195,7 +250,9 @@ class Game {
     }
     this.separate();
     this.updateBullets(dt); this.updateLobs(dt); this.updatePickups(dt);
-    if (this.mode === 'grab') this.updateGrab(dt); else this.updateRoyale(dt);
+    if (this.gemsOn) this.updateGems(dt);
+    if (this.mode === 'grab') this.updateGrabWin(dt); else if (this.mode === 'royale') this.updateRoyale(dt); else this.updateSolo(dt);
+    if (this.mode === 'solo') this.fighters = this.fighters.filter(f => f.alive || f.isPlayer);
     for (const c of this.crateRespawn) {
       c.t -= dt;
       if (c.t <= 0) { const tx = c.i % this.w, ty = (c.i / this.w) | 0, cx = (tx + 0.5) * T, cy = (ty + 0.5) * T;
@@ -240,7 +297,7 @@ class Game {
     const d = f.def;
     f.flash = Math.max(0, f.flash - dt); f.recoil = Math.max(0, f.recoil - dt * 5); f.invuln = Math.max(0, f.invuln - dt); f.revealT -= dt; f.squash *= Math.pow(0.02, dt);
     if (f.ammo < 3) f.ammo = Math.min(3, f.ammo + dt / d.atk.reload);
-    if (this.time - f.lastHurt > 3 && this.time - f.lastShot > 3 && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.13 * dt);
+    if (!d.boss && !d.minion && this.time - f.lastHurt > 3 && this.time - f.lastShot > 3 && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.13 * dt);
     if (f.super >= 1 && !f.superAnnounced) { f.superAnnounced = true; if (f.isPlayer) { Sound.play('ready'); this.ui.superReady(); } }
     // scheduled burst shots
     while (f.burstQ.length && f.burstQ[0].t <= this.time) { const s = f.burstQ.shift(); this.shoot(f, s.ang, d.atk, s.dmg); Sound.play('shoot', 1 + Math.random() * 0.1); }
@@ -262,7 +319,8 @@ class Game {
     if (it.sup && f.super >= 1) this.doSuper(f, it.aim != null ? it.aim : f.face, it.tx, it.ty);
   }
   updateDead(f, dt) {
-    if (this.mode !== 'grab') return;
+    if (this.mode === 'royale') return;
+    if (this.mode === 'solo' && (!f.isPlayer || this.lives <= 0)) return;
     f.respawnT -= dt;
     if (f.respawnT <= 0) this.respawn(f);
   }
@@ -388,7 +446,11 @@ class Game {
       b.rot += dt * 14;
       for (let i = 0; i < n && b.alive; i++) {
         const px = b.x, py = b.y; b.x += b.vx * dt / n; b.y += b.vy * dt / n; b.travel += total / n;
-        if (b.travel >= b.max) { b.alive = false; this.burst(b.x, b.y - 22, b.color, 4, 80); break; }
+        if (b.travel >= b.max) {
+          b.alive = false; this.burst(b.x, b.y - 22, b.color, 4, 80);
+          if (b.split) { const a = Math.atan2(b.vy, b.vx); for (const s of [-0.55, 0.55]) this.shoot(b.owner, a + s, { speed: 520, r: 9, color: '#ffd1f4', range: 5 }, b.split.dmg, { r: 9 }), this.bullets[this.bullets.length - 1].x = b.x, this.bullets[this.bullets.length - 1].y = b.y; }
+          break;
+        }
         const tx = Math.floor(b.x / T), ty = Math.floor(b.y / T);
         if (this.shotSolid(tx, ty)) {
           if (b.kind === 'beam') { if (tx >= 0 && ty >= 0 && tx < this.w && ty < this.h) this.breakTile(tx, ty, b.owner); else b.alive = false; continue; }
@@ -432,14 +494,18 @@ class Game {
     }
   }
   damage(f, amt, src, o = {}) {
-    if (!f.alive || f.invuln > 0 || f.leap) return;
+    if (!f.alive || f.invuln > 0 || f.leap || amt <= 0) return;
+    if (f.shield) {
+      amt *= 0.12;
+      if (src && src.isPlayer && !this.shieldHint) { this.shieldHint = true; this.ui.banner('MATH SHIELD!', 'It blocks most damage. Press Q or the 🧠 button and solve a problem to break it!', '#9ffcff', 3.2); }
+    }
     amt = Math.round(amt); f.hp -= amt; f.flash = 0.1; f.lastHurt = this.time; f.revealT = Math.max(f.revealT, 0.8);
     if (src && src !== f) {
       if (!o.isSuper) src.super = Math.min(1, src.super + amt / src.def.superCharge);
       src.stats.dmg += amt;
     }
     const mine = src && src.isPlayer, me = f.isPlayer;
-    this.texts.push({ x: f.x + rand(-12, 12), y: f.y - 70, text: String(amt), color: me ? '#ff5b5b' : mine ? '#ffffff' : '#ffe9b0', size: mine || me ? 22 : 16, life: 0.9, max: 0.9, vy: -70 });
+    this.texts.push({ x: f.x + rand(-12, 12), y: f.y - 70 * (f.def.scale || 1), text: (f.shield ? '🛡' : '') + amt, color: f.shield ? '#9ffcff' : me ? '#ff5b5b' : mine ? '#ffffff' : '#ffe9b0', size: mine || me ? 22 : 16, life: 0.9, max: 0.9, vy: -70 });
     if (mine) Sound.play('hit');
     if (me) { Sound.play('hurt'); this.cam.shake = Math.max(this.cam.shake, 5); }
     if (f.hp <= 0) {
@@ -458,8 +524,23 @@ class Game {
     Sound.play('ko');
     this.puff(f.x, f.y - 20, 14, 'rgba(255,255,255,0.95)');
     for (let k = 0; k < 10; k++) this.parts.push({ type: 'star', x: f.x, y: f.y - 30, vx: rand(-260, 260), vy: rand(-320, 60), life: rand(0.6, 1), max: 1, size: rand(6, 11), color: choice(['#ffd23f', '#fff', f.def.color]), rot: rand(0, 6), vr: rand(-10, 10), grav: 500 });
-    this.ui.feed(src && src !== f ? src.name : 'The poison', f.name, this.relColor(src), this.relColor(f));
-    if (this.mode === 'grab') {
+    this.ui.feed(src && src !== f ? src.name : this.mode === 'royale' ? 'The poison' : 'A trap gem', f.name, this.relColor(src), this.relColor(f));
+    if (this.mode === 'solo') {
+      for (let i = 0; i < f.gems; i++) this.dropGem(f.x, f.y, null);
+      f.gems = 0;
+      if (f.isPlayer) {
+        this.lives--;
+        if (this.lives > 0) { f.respawnT = 3; this.ui.playerDown(true); }
+        else { this.ui.playerDown(false); this.endSoon({ outcome: 'fail', why: 'You ran out of lives.' }, 1.8); }
+      } else {
+        this.kills++;
+        if (f.def.boss) {
+          this.cam.shake = 16; this.explode(f.x, f.y, 3 * T, 0, f, { big: true, color: '#ffd23f' });
+          for (const e of this.fighters) if (e.alive && e !== f && e.team === f.team) this.kill(e, src);
+          this.ui.banner('BOSS DEFEATED!', 'You did it!', '#ffd23f', 2.5, true); this.endSoon({ outcome: 'clear' }, 2.4);
+        } else if (this.stage.dropCube && Math.random() < this.stage.dropCube) this.cubes.push({ x: f.x, y: f.y, z: 0, vz: 360, age: 0, alive: true });
+      }
+    } else if (this.mode === 'grab') {
       for (let i = 0; i < f.gems; i++) this.dropGem(f.x, f.y, null);
       f.gems = 0; f.respawnT = 5;
       if (f.isPlayer) this.ui.playerDown(true);
@@ -474,12 +555,17 @@ class Game {
   }
   relColor(f) { if (!f) return '#7dff6a'; if (f.isPlayer) return '#ffd23f'; return f.team === this.player.team ? '#5ec8ff' : '#ff6b6b'; }
   powerUp(f, txt) {
-    f.power++; const old = f.maxHp; f.maxHp = Math.round(f.def.hp * (1 + 0.1 * f.power)); f.hp = Math.min(f.maxHp, f.hp + (f.maxHp - old) + 800);
+    f.power++; const old = f.maxHp; f.maxHp = Math.round(f.baseHp * (1 + 0.1 * f.power)); f.hp = Math.min(f.maxHp, f.hp + (f.maxHp - old) + 800);
     f.stats.cubes++; this.float(f, txt || 'POWER UP!', '#7dff6a', 20);
     for (let k = 0; k < 14; k++) this.parts.push({ type: 'star', x: f.x + rand(-20, 20), y: f.y - rand(10, 60), vx: rand(-60, 60), vy: rand(-200, -60), life: 0.9, max: 0.9, size: rand(5, 9), color: choice(['#7dff6a', '#d2ff8a', '#fff']), rot: 0, vr: rand(-8, 8), grav: 0 });
   }
   endSoon(res, delay) { if (this.ending) return; this.ending = true; setTimeout(() => this.finish(res), delay * 1000); }
-  finish(res) { if (this.over) return; this.over = true; this.ui.end(res); }
+  finish(res) {
+    if (this.over) return; this.over = true;
+    const p = this.player;
+    Object.assign(res, { time: Math.round(this.playTime), deaths: p.stats.deaths, traps: this.traps, hp: p.alive ? p.hp / p.maxHp : 0, stage: this.stage ? this.stage.id : null });
+    this.ui.end(res);
+  }
 
   // ---------- pickups ----------
   dropGem(x, y, num) {
@@ -492,9 +578,11 @@ class Game {
       if (o.vx) { const nx = o.x + o.vx * dt, ny = o.y + o.vy * dt; if (!this.walkSolid(Math.floor(nx / T), Math.floor(ny / T))) { o.x = nx; o.y = ny; } else { o.vx = -o.vx * 0.5; o.vy = -o.vy * 0.5; } const fr = Math.pow(0.05, dt); o.vx *= fr; o.vy *= fr; if (Math.abs(o.vx) < 3) o.vx = 0; }
     };
     for (const gm of this.gems) {
-      phys(gm); if (gm.age < 0.5) continue;
+      phys(gm);
+      if (gm.num != null && gm.age > 22) { gm.alive = false; this.puff(gm.x, gm.y - 10, 3, 'rgba(210,170,255,0.8)'); continue; }
+      if (gm.age < 0.5) continue;
       for (const f of this.fighters) {
-        if (!f.alive || f.leap) continue;
+        if (!f.alive || f.leap || (this.mode === 'solo' && !f.isPlayer && !this.stage.botsTakeGems)) continue;
         if ((f.x - gm.x) ** 2 + (f.y - gm.y) ** 2 < (f.r + 16) ** 2) { this.takeGem(f, gm); break; }
       }
     }
@@ -521,7 +609,7 @@ class Game {
       this.damage(f, 400, null, { isSuper: true });
       for (let k = 0; k < 10; k++) this.parts.push({ type: 'zap', x: f.x, y: f.y - 30, vx: rand(-200, 200), vy: rand(-200, 200), life: 0.35, max: 0.35, size: rand(10, 20), color: '#9ffcff' });
       this.float(f, 'TRAP GEM!', '#9ffcff', f.isPlayer ? 22 : 16);
-      if (f.isPlayer) { Sound.play('trap'); this.ui.trap(gm.num, this.rule); }
+      if (f.isPlayer) { this.traps++; Sound.play('trap'); this.ui.trap(gm.num, this.rule); }
     }
   }
   takeCube(f, c) {
@@ -529,7 +617,7 @@ class Game {
     if (f.isPlayer) {
       Sound.play('cube');
       this.ui.quiz('cube', (ok, fast) => {
-        if (ok) { this.powerUp(f, fast ? 'GENIUS! +POWER' : 'POWER UP!'); f.super = Math.min(1, f.super + (fast ? 0.6 : 0.4)); }
+        if (ok) { this.solved++; this.powerUp(f, fast ? 'GENIUS! +POWER' : 'POWER UP!'); f.super = Math.min(1, f.super + (fast ? 0.6 : 0.4)); }
         else this.float(f, 'The cube fizzled…', '#ccc', 18);
       });
     } else {
@@ -541,10 +629,10 @@ class Game {
 
   // ---------- modes ----------
   teamGems(team) { let s = 0; for (const f of this.fighters) if (f.team === team) s += f.gems; return s; }
-  updateGrab(dt) {
+  updateGems(dt) {
     this.mineT -= dt;
     if (this.mineT <= 0) {
-      this.mineT = 4.2;
+      this.mineT = (this.stage && this.stage.gemEvery) || 4.2;
       if (this.gems.length < 14) {
         const good = Math.random() < 0.56, num = BBMath.gemNumber(this.rule, good);
         this.dropGem(this.mine.x, this.mine.y, num); this.mineFlash = 0.4;
@@ -553,10 +641,12 @@ class Game {
     if (this.mineFlash > 0) this.mineFlash -= dt;
     this.ruleT -= dt;
     if (this.ruleT <= 0) {
-      this.rule = BBMath.pickRule(this.level, this.rule); this.ruleT = this.ruleLen;
+      this.rule = BBMath.pickRule(this.ruleLv, this.rule, this.ruleNames); this.ruleT = this.ruleLen;
       for (const f of this.fighters) if (f.bot) f.bot.beliefs.clear();
       this.ui.newRule(this.rule); Sound.play('rule');
     } else if (this.ruleT < 5 && this.ruleT + dt >= 5) this.ui.banner('RULE CHANGES IN 5!', 'Gems on the floor may become traps', '#ffd23f', 1.6);
+  }
+  updateGrabWin(dt) {
     const g0 = this.teamGems(0), g1 = this.teamGems(1);
     const lead = g0 >= 10 && g0 > g1 ? 0 : g1 >= 10 && g1 > g0 ? 1 : -1;
     if (lead !== this.lead) { this.lead = lead; this.cd = 15; if (lead >= 0) { this.ui.banner(lead === 0 ? 'HOLD ON!' : 'STOP THEM!', lead === 0 ? 'Keep 10+ gems for 15 seconds' : 'The other team has 10+ gems!', lead === 0 ? '#5ec8ff' : '#ff6b6b', 1.8); Sound.play('rule'); } }
@@ -578,6 +668,38 @@ class Game {
       this.poisonTick = 0.5;
       for (const f of this.fighters) if (f.alive && !this.inSafe(f.x, f.y)) { this.damage(f, 450, null, { isSuper: true }); }
     }
+  }
+  updateSolo(dt) {
+    const S = this.stage; if (this.ending) return;
+    if (S.time) {
+      this.clock -= dt;
+      if (this.clock <= 0) {
+        this.clock = 0;
+        if (S.type === 'survive') { this.ui.banner('YOU SURVIVED!', '', '#ffd23f', 2.2, true); this.endSoon({ outcome: 'clear' }, 1.6); }
+        else { this.ui.banner("TIME'S UP!", '', '#ff6b6b', 2, true); this.endSoon({ outcome: 'fail', why: "Time ran out." }, 1.6); }
+        return;
+      }
+      if (S.type !== 'survive' && this.clock <= 10 && Math.ceil(this.clock) !== Math.ceil(this.clock + dt)) Sound.play('tick');
+    }
+    const left = this.enemiesLeft();
+    if (S.waves && left === (this.boss && this.boss.alive ? 1 : 0) && this.waveIdx < S.waves.length - 1) {
+      this.waveT -= dt;
+      if (this.waveT <= 0) {
+        this.waveIdx++; this.waveT = 1.6;
+        for (const spec of S.waves[this.waveIdx]) for (let i = 0; i < (spec.n || 1); i++) this.spawnEnemy(spec);
+        if (S.waves.length > 1) this.ui.banner(this.waveIdx === S.waves.length - 1 ? 'FINAL WAVE!' : `WAVE ${this.waveIdx + 1}`, `${S.waves[this.waveIdx].reduce((a, s) => a + (s.n || 1), 0)} robots incoming`, '#ff9f1c', 1.4);
+      }
+    }
+    if (S.swarm) {
+      this.swarmT -= dt;
+      const prog = S.time ? clamp(1 - this.clock / S.time, 0, 1) : 0.5;
+      if (this.swarmT <= 0) { this.swarmT = S.swarm.every * (1 - 0.35 * prog); if (left < S.swarm.max) this.spawnEnemy(choice(S.swarm.pool)); }
+    }
+    let done = false;
+    if (S.type === 'defeat') done = this.waveIdx === S.waves.length - 1 && this.enemiesLeft() === 0;
+    else if (S.type === 'gems') done = this.player.alive && this.player.gems >= S.goal;
+    else if (S.type === 'cubes') done = this.solved >= S.goal;
+    if (done) { this.ui.banner('STAGE CLEAR!', '', '#ffd23f', 2.2, true); Sound.play('win'); this.endSoon({ outcome: 'clear' }, 1.6); }
   }
   inSafe(x, y) { const s = this.safe; return !s || (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1); }
 
@@ -617,6 +739,7 @@ class Game {
     const p = this.player, c = this.cam;
     let tx = p.x, ty = p.y - 30;
     if (this.input.mouse && this.input.aim != null && p.alive) { tx += Math.cos(this.input.aim) * 50; ty += Math.sin(this.input.aim) * 40; }
+    const b = this.boss; if (b && b.alive && p.alive) { tx += clamp((b.x - p.x) * 0.3, -170, 170); ty += clamp((b.y - p.y) * 0.35, -190, 190); }
     const k = Math.min(1, dt * 7); c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
     const hw = this.vw / 2 / c.s, hh = this.vh / 2 / c.s, W = this.w * T, H = this.h * T, m = 1.4 * T;
     if (2 * hw >= W + 2 * m) c.x = W / 2; else c.x = clamp(c.x, hw - m, W - hw + m);
@@ -666,6 +789,14 @@ class Bot {
     const hpR = f.hp / f.maxHp, tgtD = this.target ? dist(f.x, f.y, this.target.x, this.target.y) : 1e9;
     this.goal = null; this.mode = 'idle'; this.crate = -1;
     const nearest = (list, ok, maxD) => { let b = null, bd2 = maxD; for (const o of list) { if (!o.alive || !ok(o)) continue; const d = dist(f.x, f.y, o.x, o.y); if (d < bd2) { bd2 = d; b = o; } } return b; };
+    if (g.mode === 'solo') {
+      const P = g.player;
+      if (hpR < 0.25 && this.target && tgtD < 4 * T && Math.random() < 0.4) { this.mode = 'retreat'; const a = Math.atan2(f.y - this.target.y, f.x - this.target.x); this.goal = g.nearestOpen(f.x + Math.cos(a) * 4 * T, f.y + Math.sin(a) * 4 * T); return; }
+      if (g.gemsOn && g.stage.botsTakeGems) { const gem = nearest(g.gems, gm => gm.age > 0.3 && this.believes(gm), 8 * T); if (gem && !(this.target && tgtD < 3.5 * T)) { this.mode = 'gem'; this.goal = { x: gem.x, y: gem.y }; return; } }
+      if (this.target && tgtD < 10 * T) { this.mode = 'fight'; return; }
+      if (P.alive) { this.mode = 'hunt'; const hid = !g.canSee(f.team, P); this.goal = { x: P.x + (hid ? rand(-2, 2) * T : 0), y: P.y + (hid ? rand(-2, 2) * T : 0) }; return; }
+      this.mode = 'idle'; this.goal = { x: f.spawn.x, y: f.spawn.y }; return;
+    }
     if (g.mode === 'grab') {
       const mySide = f.team === 0 ? 1 : -1;
       if (hpR < 0.33 && this.target && tgtD < 7 * T) { this.mode = 'retreat'; this.goal = { x: f.spawn.x, y: f.spawn.y }; return; }
@@ -746,7 +877,7 @@ class Bot {
       if (this.mode === 'lane' && dist(f.x, f.y, this.goal.x, this.goal.y) < 1.2 * T) mv = { x: this.strafe * 0.5, y: Math.sin(g.time * 1.3 + f.seed) * 0.4 };
     }
     // keep away from gems the bot thinks are traps
-    if (g.mode === 'grab') for (const gm of g.gems) {
+    if (g.gemsOn && (g.mode !== 'solo' || f.isPlayer || g.stage.botsTakeGems)) for (const gm of g.gems) {
       if (gm.age < 0.3 || this.believes(gm)) continue; const dx = f.x - gm.x, dy = f.y - gm.y, d = Math.hypot(dx, dy);
       if (d < 80 && d > 0.1) { mv.x += dx / d * (80 - d) / 30; mv.y += dy / d * (80 - d) / 30; }
     }
@@ -771,6 +902,66 @@ class Bot {
       }
     }
     return it;
+  }
+}
+
+// ---------- bosses ----------
+// A boss has a Math Shield (blocks 88% of damage) that the player breaks by solving a problem.
+// spec.patterns lists its attacks in order: ring, aim, slam, charge, split.
+class BossAI {
+  constructor(g, f, spec) {
+    this.g = g; this.f = f; this.spec = spec; this.t = 2.2; this.i = 0; this.summoned = 0; this.strafe = 1; this.strafeT = 1.5; this.queue = [];
+    this.beliefs = new Map(); this.mathSkill = 0;
+    f.shield = true; f.shieldT = 0; f.stun = 0;
+  }
+  believes() { return false; }
+  intent(dt) {
+    const g = this.g, f = this.f, P = g.player, it = { mx: 0, my: 0, aim: null, fire: false, sup: false, tx: null, ty: null, aiming: true };
+    if (g.phase !== 'play') return it;
+    if (!f.shield && f.shieldT > 0) { f.shieldT -= dt; if (f.shieldT <= 0) { f.shield = true; g.ui.banner('SHIELD IS BACK!', 'Solve another problem to break it', '#9ffcff', 1.6); Sound.play('rule'); } }
+    for (const q of this.queue) { q.t -= dt; if (q.t <= 0) { q.fn(); q.done = true; } } this.queue = this.queue.filter(q => !q.done);
+    if (f.stun > 0) { f.stun -= dt; it.aim = f.face; return it; }
+    const hpR = f.hp / f.maxHp, thr = this.spec.summonAt || [0.7, 0.4];
+    if (this.summoned < thr.length && hpR < thr[this.summoned]) {
+      this.summoned++;
+      for (let i = 0; i < (this.spec.minionCount || 2); i++) g.spawnEnemy({ hero: this.spec.minion || 'robo', hp: 0.8, skill: 0.4 }, { x: f.x + rand(-90, 90), y: f.y + rand(-90, 90) });
+      g.ui.banner('MINIONS!', `${f.name} called for help`, '#ff6b6b', 1.4);
+    }
+    if (!P.alive) { it.mx = Math.sin(g.time) * 0.3; return it; }
+    const d = dist(f.x, f.y, P.x, P.y), ang = Math.atan2(P.y - f.y, P.x - f.x);
+    this.strafeT -= dt; if (this.strafeT <= 0) { this.strafeT = rand(1.2, 2.4); this.strafe = -this.strafe; }
+    const want = 4.5 * T, fwd = d > want + 40 ? 1 : d < want - 80 ? -0.7 : 0;
+    it.mx = Math.cos(ang) * fwd + Math.cos(ang + Math.PI / 2) * this.strafe * 0.6; it.my = Math.sin(ang) * fwd + Math.sin(ang + Math.PI / 2) * this.strafe * 0.6;
+    it.aim = ang;
+    this.t -= dt;
+    if (this.t <= 0 && !f.dash) {
+      const angry = hpR < 0.4, pats = this.spec.patterns || ['ring', 'aim', 'slam', 'charge'];
+      this.attack(pats[this.i++ % pats.length], ang, angry);
+      const every = this.spec.every || 2.2; this.t = (angry ? every * 0.75 : every) + rand(0, 0.6);
+    }
+    return it;
+  }
+  attack(p, ang, angry) {
+    const g = this.g, f = this.f, P = g.player, k = this.spec.dmg || 1, o = (speed, r, color, range) => ({ speed, r, color, range });
+    f.recoil = 1; f.lastShot = g.time;
+    if (p === 'ring') {
+      const n = angry ? 20 : 14, off = rand(0, TAU), volley = () => { for (let i = 0; i < n; i++) g.shoot(f, off + i / n * TAU, o(430, 13, f.def.atk.color, 11), 420 * k); Sound.play('star', 0.6); };
+      volley(); if (angry) this.queue.push({ t: 0.45, fn: () => { const off2 = off + Math.PI / n; for (let i = 0; i < n; i++) g.shoot(f, off2 + i / n * TAU, o(430, 13, f.def.atk.color, 11), 420 * k); } });
+    } else if (p === 'aim') {
+      const shots = () => { const a = Math.atan2(P.y - f.y, P.x - f.x); for (let j = -2; j <= 2; j++) g.shoot(f, a + j * 0.13, o(640, 11, '#ff6b6b', 10), 380 * k); Sound.play('shotgun'); };
+      shots(); this.queue.push({ t: 0.5, fn: shots }); if (angry) this.queue.push({ t: 1, fn: shots });
+    } else if (p === 'slam') {
+      const n = angry ? 5 : 3;
+      for (let i = 0; i < n; i++) { const a = rand(0, TAU), r = i === 0 ? 0 : rand(1, 2.4) * T, tx = P.x + P.vx * 0.5 + Math.cos(a) * r, ty = P.y + P.vy * 0.5 + Math.sin(a) * r;
+        g.lobs.push({ x0: f.x, y0: f.y - 80, x1: tx, y1: ty, t: -i * 0.12, dur: 1.05, dmg: 700 * k, radius: 1.3 * T, owner: f, team: f.team, alive: true, spin: rand(0, 6) }); }
+      Sound.play('lob', 0.6);
+    } else if (p === 'charge') {
+      f.dash = { vx: Math.cos(ang) * 880, vy: Math.sin(ang) * 880, left: 6.5 * T, hit: new Set(), dmg: 900 * k }; Sound.play('dash', 0.7);
+    } else if (p === 'split') {
+      const n = angry ? 7 : 5;
+      for (let i = 0; i < n; i++) { const a = ang + (i - (n - 1) / 2) * 0.26; g.shoot(f, a, o(460, 15, '#ff8be6', 4.5), 380 * k); g.bullets[g.bullets.length - 1].split = { n: 2, dmg: 200 * k }; }
+      Sound.play('star', 0.5);
+    }
   }
 }
 
@@ -938,18 +1129,26 @@ Game.prototype.drawBush = function (ctx, x, y, alpha, t) {
 };
 Game.prototype.drawFighter = function (ctx, f, dpr) {
   const P = this.player, visible = this.canSee(P.team, f); if (!visible) return;
-  const zoom = this.cam.s * dpr, SW = 150, SH = 170, FX = 75, FY = 135;
+  const k = f.def.scale || 1, zoom = this.cam.s * dpr, SW = 150 * k, SH = 170 * k, FX = 75 * k, FY = 135 * k;
   if (f.spriteZoom !== zoom) { f.sprite.width = Math.ceil(SW * zoom); f.sprite.height = Math.ceil(SH * zoom); f.spriteZoom = zoom; }
   const sc = f.sprite.getContext('2d'); sc.setTransform(1, 0, 0, 1, 0, 0); sc.clearRect(0, 0, f.sprite.width, f.sprite.height); sc.setTransform(zoom, 0, 0, zoom, 0, 0);
-  drawHero(sc, f.hero, { x: FX, y: FY, s: 1.14, t: this.time, aim: f.face, moving: f.moving, walk: f.walk, recoil: f.recoil, seed: f.seed, noShadow: true, squash: f.squash });
+  drawHero(sc, f.hero, { x: FX, y: FY, s: 1.14 * k, t: this.time, aim: f.face, moving: f.moving, walk: f.walk, recoil: f.recoil, seed: f.seed, noShadow: true, squash: f.squash });
   if (f.flash > 0) { sc.globalCompositeOperation = 'source-atop'; sc.fillStyle = 'rgba(255,255,255,0.8)'; sc.fillRect(0, 0, SW, SH); sc.globalCompositeOperation = 'source-over'; }
-  ell(ctx, f.x, f.y, 25 * (f.leap ? 0.7 : 1), 9 * (f.leap ? 0.7 : 1)); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
+  ell(ctx, f.x, f.y, 25 * k * (f.leap ? 0.7 : 1), 9 * k * (f.leap ? 0.7 : 1)); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
   let a = f.inBush ? 0.55 : 1; if (f.invuln > 0 && !f.dash && !f.leap) a *= 0.6 + 0.4 * Math.sin(this.time * 30);
   ctx.globalAlpha = a; ctx.drawImage(f.sprite, f.x - FX, f.y - FY - f.z, SW, SH); ctx.globalAlpha = 1;
+  if (f.shield) {
+    const cy = f.y - 46 * k, R = 64 * k, t = this.time;
+    circ(ctx, f.x, cy, R); ctx.fillStyle = 'rgba(120,230,255,0.16)'; ctx.fill();
+    ctx.save(); ctx.translate(f.x, cy); ctx.rotate(t * 0.8); ctx.setLineDash([18, 10]); circ(ctx, 0, 0, R); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(160,240,255,0.85)'; ctx.stroke(); ctx.restore();
+    for (let i = 0; i < 6; i++) { const a = t * 1.2 + i * TAU / 6; txt(ctx, '+−×÷=?'[i], f.x + Math.cos(a) * R, cy + Math.sin(a) * R * 0.9, 18, '#e8fdff', 'center', 3); }
+  }
+  if (f.stun > 0) for (let i = 0; i < 3; i++) { const a = this.time * 5 + i * TAU / 3; star(ctx, f.x + Math.cos(a) * 30 * k, f.y - 100 * k + Math.sin(a) * 8, 8, 3.5); fs(ctx, '#ffd23f', 2); }
   if (f.invuln > 0.3 && !f.dash && !f.leap) { circ(ctx, f.x, f.y - 40, 46); ctx.fillStyle = 'rgba(140,220,255,0.15)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(160,230,255,0.7)'; ctx.stroke(); }
 };
 Game.prototype.drawOverhead = function (ctx, f) {
-  const P = this.player, mine = f.team === P.team, x = f.x, y = f.y - 124 - f.z, w = 70;
+  if (f.def.boss) return;
+  const P = this.player, mine = f.team === P.team, x = f.x, y = f.y - 124 * (f.def.scale || 1) - f.z, w = 70;
   if (!f.isPlayer) txt(ctx, f.name, x, y - 13, 14, mine ? '#9fdcff' : '#ffb0b0');
   rrect(ctx, x - w / 2, y - 7, w, 15, 6); fs(ctx, '#2a2340', 3);
   const r = clamp(f.hp / f.maxHp, 0, 1);
@@ -963,6 +1162,7 @@ Game.prototype.drawOverhead = function (ctx, f) {
 };
 Game.prototype.drawGem = function (ctx, gm, t) {
   const bob = gm.z > 0 ? 0 : Math.sin(t * 3 + gm.id) * 3, y = gm.y - 18 - gm.z + bob;
+  if (gm.num != null && gm.age > 18 && Math.sin(gm.age * 18) < 0) return;
   ell(ctx, gm.x, gm.y, 14, 6); ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fill();
   if (gm.num == null) this.gemShape(ctx, gm.x, y, 12, '#ffd23f', '#fff3a0');
   else { this.gemShape(ctx, gm.x, y, 12, '#b45cff', '#e8c2ff'); }

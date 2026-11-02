@@ -68,6 +68,7 @@ function nextUnlock() { return HERO_ORDER.map(id => HEROES[id]).filter(h => h.un
 function refreshLobby() {
   const d = Save.d, h = HEROES[d.hero], L = LV[d.level - 1];
   $('#lb-trophies').textContent = d.trophies;
+  $('#lb-advstars').textContent = `⭐ ${totalStars()} / ${STAGES.length * 3}`;
   $('#lb-acc').textContent = d.asked ? Math.round(100 * d.correct / d.asked) + '%' : '–';
   $('#lb-name').textContent = h.name; $('#lb-title').textContent = `${h.title} · ${h.role}`;
   $('#lb-stars').textContent = '★'.repeat(d.level); $('#lb-lvname').textContent = L.name; $('#lb-lvamc').textContent = L.amc;
@@ -81,12 +82,12 @@ function refreshLobby() {
   $('#btn-sfx').classList.toggle('off', !d.sfx); $('#btn-music').classList.toggle('off', !d.music);
   requestAnimationFrame(() => paintPortrait($('#mini-hero'), d.hero, { bg: false, feet: 0.95, s: 0.62 }));
 }
-$('#btn-start').onclick = () => { click(); Music.start('lobby'); show('lobby'); refreshLobby(); };
+$('#btn-start').onclick = () => { click(); Music.start('lobby'); show('lobby'); refreshLobby(); Cloud.sync(); };
 $('#btn-sfx').onclick = () => { Save.d.sfx = !Save.d.sfx; Save.save(); Sound.init(); Sound.apply(); click(); refreshLobby(); };
 $('#btn-music').onclick = () => { Save.d.music = !Save.d.music; Save.save(); Sound.init(); Sound.apply(); if (Save.d.music) Music.start('lobby'); click(); refreshLobby(); };
 $('#btn-how').onclick = () => { click(); modal('m-how', true); };
 $$('[data-close]').forEach(b => b.onclick = () => { click(); b.closest('.modal').classList.remove('on'); if (b.id === 'how-ok' && App.afterHow) { const f = App.afterHow; App.afterHow = null; f(); } });
-$$('[data-back]').forEach(b => b.onclick = () => { click(); show(b.dataset.back); refreshLobby(); });
+$$('[data-back]').forEach(b => b.onclick = () => { click(); modal('m-stage', false); show(b.dataset.back); refreshLobby(); });
 
 $('#btn-mode').onclick = () => { click(); $$('.mcard').forEach(c => c.classList.toggle('sel', c.dataset.mode === Save.d.mode)); modal('m-mode', true); };
 $$('.mcard').forEach(c => c.onclick = () => { click(); Save.d.mode = c.dataset.mode; Save.save(); modal('m-mode', false); refreshLobby(); });
@@ -124,7 +125,7 @@ function buildHeroes() {
   requestAnimationFrame(() => paintPortrait($('#hd-canvas'), h.id, { bg1: '#fff6c9', bg2: h.color, feet: 0.88 }));
 }
 $('#btn-heroes').onclick = () => { click(); App.hdSel = Save.d.hero; show('heroes'); buildHeroes(); };
-$('#hd-select').onclick = () => { const h = HEROES[App.hdSel]; if (h.unlock > Save.d.trophies) return; click(); Save.d.hero = h.id; Save.save(); buildHeroes(); };
+$('#hd-select').onclick = () => { const h = HEROES[App.hdSel]; if (h.unlock > Save.d.trophies) return; click(); Save.d.hero = h.id; Save.save(); buildHeroes(); Cloud.later(); };
 
 // ---------- match flow ----------
 $('#btn-play').onclick = () => {
@@ -132,18 +133,30 @@ $('#btn-play').onclick = () => {
   if (!Save.d.seenHow) { Save.d.seenHow = true; Save.save(); App.afterHow = startMatch; modal('m-how', true); return; }
   startMatch();
 };
-function startMatch() {
+function startMatch(stage) {
   Sound.init();
   App.session = { asked: 0, correct: 0, streak: 0, best: 0 };
-  App.game = new Game({ mode: Save.d.mode, level: Save.d.level, heroId: Save.d.hero, ui: GameUI });
+  App.stage = stage || null;
+  const mode = stage ? (stage.type === 'grab' ? 'grab' : stage.type === 'royale' ? 'royale' : 'solo') : Save.d.mode;
+  const level = stage ? stage.math : Save.d.level;
+  App.game = new Game({ mode, level, heroId: Save.d.hero, ui: GameUI, stage });
   App.game.setView(W, H); App.pauseOn = false;
   const g = App.game, grab = g.mode === 'grab';
-  $('#vs-mode').textContent = grab ? 'NUMBER GRAB' : 'BRAIN ROYALE';
-  const card = f => `<div class="vcard${f.isPlayer ? ' me' : ''}"><canvas data-h="${f.hero}"></canvas><b>${f.name}</b></div>`;
-  if (grab) { $('#vs-a').innerHTML = g.fighters.filter(f => f.team === 0).map(card).join(''); $('#vs-b').innerHTML = g.fighters.filter(f => f.team === 1).map(card).join(''); $('.vs-x').style.display = ''; }
+  $('#vs-mode').textContent = stage ? `STAGE ${stage.id} · ${stage.name.toUpperCase()}` : grab ? 'NUMBER GRAB' : 'BRAIN ROYALE';
+  const card = f => `<div class="vcard${f.isPlayer ? ' me' : ''}"><canvas data-h="${f.hero}"></canvas><b>${esc(f.name)}</b></div>`;
+  const ecard = id => `<div class="vcard"><canvas data-h="${id}"></canvas><b>${HEROES[id].name}</b></div>`;
+  if (g.mode === 'solo') {
+    $('#vs-a').innerHTML = card(g.player);
+    const foes = [];
+    if (stage.boss) foes.push(stage.boss.hero);
+    for (const w of stage.waves || []) for (const s of w) foes.push(s.hero);
+    if (stage.swarm) for (const s of stage.swarm.pool) foes.push(s.hero);
+    $('#vs-b').innerHTML = Array.from(new Set(foes)).filter(id => HEROES[id]).slice(0, 3).map(ecard).join('');
+  } else if (grab) { $('#vs-a').innerHTML = g.fighters.filter(f => f.team === 0).map(card).join(''); $('#vs-b').innerHTML = g.fighters.filter(f => f.team === 1).map(card).join(''); }
   else { $('#vs-a').innerHTML = g.fighters.slice(0, 3).map(card).join(''); $('#vs-b').innerHTML = g.fighters.slice(3).map(card).join(''); }
-  const L = LV[Save.d.level - 1];
-  $('#vs-sub').innerHTML = `Map: ${grab ? 'Crystal Canyon' : 'Brain Jungle'} · Math level: <b style="color:${L.color}">${L.name}</b> (${L.amc})`;
+  const L = LV[level - 1];
+  $('#vs-sub').innerHTML = stage ? `🎯 ${esc(stageGoalText(stage))} · Math: <b style="color:${L.color}">${L.name}</b> (${L.amc})`
+    : `Map: ${grab ? 'Crystal Canyon' : 'Brain Jungle'} · Math level: <b style="color:${L.color}">${L.name}</b> (${L.amc})`;
   show('vs'); Music.start('battle');
   requestAnimationFrame(() => $$('#vs canvas').forEach(c => paintPortrait(c, c.dataset.h, { bg: false, feet: 0.88, aim: c.closest('.red') ? Math.PI - 0.35 : 0.35 })));
   clearTimeout(App.vsT); App.vsT = setTimeout(beginMatch, 2600);
@@ -151,9 +164,14 @@ function startMatch() {
 function beginMatch() {
   if (App.scr !== 'vs') return;
   const g = App.game; show('hud');
-  $('#hud-grab').classList.toggle('on', g.mode === 'grab'); $('#hud-roy').classList.toggle('on', g.mode === 'royale');
+  const on = (id, v) => $('#' + id).classList.toggle('on', !!v);
+  on('sc-row', g.mode === 'grab'); on('roy-row', g.mode === 'royale'); on('roy-note', g.mode === 'royale');
+  on('obj-row', g.mode === 'solo'); on('obj-clock', g.mode === 'solo' && g.stage.time); on('bossbar', !!g.boss); on('rule', g.gemsOn);
+  if (g.boss) setText('bb-name', g.boss.name);
+  $('.obj').style.display = g.boss ? 'none' : '';
+  for (const k in hudCache) delete hudCache[k];
   $('#feed').innerHTML = ''; $('#dead').classList.remove('on');
-  if (g.mode === 'grab') setRule(g.rule);
+  if (g.gemsOn) setRule(g.rule);
 }
 $('#vs').addEventListener('pointerdown', () => { clearTimeout(App.vsT); beginMatch(); });
 
@@ -195,25 +213,45 @@ function updateHUD() {
   const g = App.game, p = g.player;
   if (g.mode === 'grab') {
     setText('sc-a', String(g.teamGems(0))); setText('sc-b', String(g.teamGems(1)));
-    const mid = $('.sc.mid');
+    const mid = $('#sc-mid');
     if (g.lead >= 0) { setText('sc-clock', String(Math.ceil(g.cd))); setText('sc-cd', g.lead === 0 ? 'YOU WIN IN' : 'THEY WIN IN'); mid.classList.toggle('cd-us', g.lead === 0); mid.classList.toggle('cd-them', g.lead === 1); }
     else { const c = Math.max(0, Math.ceil(g.clock)); setText('sc-clock', `${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`); setText('sc-cd', ''); mid.classList.remove('cd-us', 'cd-them'); }
-    $('#rule-fill').style.width = (g.ruleT / g.ruleLen * 100) + '%';
+  } else if (g.mode === 'solo') {
+    const o = g.objective(), S = g.stage;
+    if (o) { setText('obj-ico', o.ico); setText('obj-txt', o.txt); setText('obj-num', o.goal ? `${o.cur}/${o.goal}` : ''); $('#obj-fill').style.width = (o.goal ? clamp(o.cur / o.goal, 0, 1) * 100 : 0) + '%'; }
+    if (S.time) { const c = Math.max(0, Math.ceil(g.clock)); setText('obj-time', `${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`); }
+    const lv = '❤️'.repeat(Math.max(0, g.lives)) + '<span class="gone">❤️</span>'.repeat(Math.max(0, (S.lives || 3) - g.lives));
+    if (hudCache.lives !== lv) { hudCache.lives = lv; $('#lives').innerHTML = lv; }
+    const b = g.boss;
+    if (b) {
+      $('#bb-fill').style.width = clamp(b.hp / b.maxHp, 0, 1) * 100 + '%'; setText('bb-hp', `${Math.max(0, Math.ceil(b.hp)).toLocaleString('en-US')} / ${b.maxHp.toLocaleString('en-US')}`);
+      const sh = b.alive && b.shield, el = $('#bb-shield'); el.classList.toggle('down', !sh);
+      setText('bb-shield', !b.alive ? '💥 DEFEATED' : sh ? (g.shieldCD > 0 ? `🛡️ MATH SHIELD UP · try again in ${Math.ceil(g.shieldCD)} s` : '🛡️ MATH SHIELD UP · press Q or 🧠 to break it') : `⚔️ SHIELD DOWN! ATTACK! (${Math.ceil(b.shieldT)} s)`);
+    }
   } else {
     setText('roy-left', String(g.fighters.filter(f => f.alive).length));
     if (g.safe && g.safe.p > 0) setText('roy-hint', p.alive && !g.inSafe(p.x, p.y) ? '☠️ You are in the POISON! Move to the center!' : '☠️ Poison closing · stay near the center');
   }
   const sp = Math.round(p.super * 100), ab = $('#ab-super');
   if (hudCache.sup !== sp) { hudCache.sup = sp; $('#ab-ring').style.setProperty('--p', sp); ab.classList.toggle('ready', sp >= 100); }
-  const cd = Math.ceil(g.brainCD), bb = $('#ab-brain');
-  bb.classList.toggle('cool', cd > 0 || !p.alive);
-  setText('ab-brain-txt', cd > 0 ? `READY IN ${cd}` : 'BRAIN CHARGE');
-  if (!p.alive && g.mode === 'grab') setText('dead-s', `Respawning in ${Math.max(1, Math.ceil(p.respawnT))}…`);
+  if (g.gemsOn) $('#rule-fill').style.width = (g.ruleT / g.ruleLen * 100) + '%';
+  const bb = $('#ab-brain'), shieldUp = g.boss && g.boss.alive && g.boss.shield;
+  const cd = Math.ceil(shieldUp ? g.shieldCD : g.brainCD);
+  bb.classList.toggle('cool', cd > 0 || !p.alive); bb.classList.toggle('shieldb', !!shieldUp);
+  setText('ab-brain-txt', cd > 0 ? `READY IN ${cd}` : shieldUp ? 'BREAK SHIELD' : 'BRAIN CHARGE');
+  if (!p.alive && g.mode !== 'royale') setText('dead-s', g.mode === 'solo' ? `Respawning in ${Math.max(1, Math.ceil(p.respawnT))}… (${g.lives} ${g.lives === 1 ? 'life' : 'lives'} left)` : `Respawning in ${Math.max(1, Math.ceil(p.respawnT))}…`);
 }
 $('#ab-brain').onclick = () => brainCharge();
 function brainCharge() {
   const g = App.game; if (!g || g.phase !== 'play' || g.paused || App.pauseOn || Quiz.isOpen) return;
   const p = g.player; if (!p.alive) return;
+  const b = g.boss;
+  if (b && b.alive && b.shield) {
+    if (g.shieldCD > 0) { toast(`Try again in ${Math.ceil(g.shieldCD)} s`); return; }
+    g.shieldCD = 5;
+    Quiz.open('shield', ok => { if (ok) g.breakShield(); else toast('The shield holds! Try another problem in a few seconds.'); });
+    return;
+  }
   if (g.brainCD > 0) { toast(`Brain Charge ready in ${Math.ceil(g.brainCD)} s`); return; }
   if (p.super >= 1) { toast('Your SUPER is already charged! Use it (SPACE / yellow button)'); return; }
   g.brainCD = 25;
@@ -227,12 +265,15 @@ $('#btn-revive').onclick = () => {
 $('#btn-pause').onclick = () => setPause(true);
 $('#btn-resume').onclick = () => { click(); setPause(false); };
 $('#btn-howp').onclick = () => { click(); modal('m-how', true); };
-$('#btn-quit').onclick = () => { click(); setPause(false); if (App.game) App.game.over = true; App.game = null; Music.start('lobby'); show('lobby'); refreshLobby(); };
+$('#btn-quit').onclick = () => { click(); setPause(false); if (App.game) App.game.over = true; App.game = null; Music.start('lobby'); if (App.stage) { App.stage = null; openStages(); } else { show('lobby'); refreshLobby(); } };
 function setPause(on) { if (!App.game || Quiz.isOpen) return; App.pauseOn = on; modal('m-pause', on); if (on) resetHeld(); }
 document.addEventListener('visibilitychange', () => { if (document.hidden && App.scr === 'hud' && App.game && !App.game.over && !Quiz.isOpen) setPause(true); });
 
 // ---------- results ----------
 function showResults(res) {
+  if (res.stage) return showStageResults(res);
+  $('#res-stars').classList.remove('on'); $('#res-goals').classList.remove('on'); $('#btn-next').classList.remove('on');
+  $('#btn-lobby span').textContent = 'LOBBY'; $('#btn-again span').textContent = 'PLAY AGAIN';
   const g = App.game, p = g.player, S = App.session, d = Save.d, L = d.level;
   let title, color, sub, delta;
   const brain = Math.min(5, Math.floor(S.correct / 2));
@@ -261,9 +302,118 @@ function showResults(res) {
   show('results'); Music.stop(); Sound.play(title === 'VICTORY!' || (res.rank && res.rank <= 3) ? 'win' : 'lose');
   if (real > 0) setTimeout(() => Sound.play('trophy'), 900);
   requestAnimationFrame(() => paintPortrait($('#res-hero'), p.hero, { bg1: '#fff6c9', bg2: color === '#ff6b6b' || color === '#ff8a8a' ? '#8a8fb0' : HEROES[p.hero].color, feet: 0.88 }));
+  Cloud.later(500);
 }
-$('#btn-again').onclick = () => { click(); startMatch(); };
-$('#btn-lobby').onclick = () => { click(); App.game = null; Music.start('lobby'); show('lobby'); refreshLobby(); };
+$('#btn-again').onclick = () => { click(); startMatch(App.stage); };
+$('#btn-lobby').onclick = () => { click(); App.game = null; Music.start('lobby'); if (App.stage) { App.stage = null; openStages(); } else { show('lobby'); refreshLobby(); } };
+$('#btn-next').onclick = () => { click(); const i = STAGES.indexOf(App.stage), nx = STAGES[i + 1]; App.game = null; if (nx && stageOpen(i + 1)) openStageCard(nx); else openStages(); };
+
+// ---------- adventure (stages) ----------
+const TROPHIES_PER_STAR = 4;
+const stageRec = id => Save.d.stages[id] || { stars: 0, best: null, clears: 0 };
+const stageOpen = i => i === 0 || stageRec(STAGES[i - 1].id).stars > 0;
+const totalStars = () => STAGES.reduce((a, s) => a + stageRec(s.id).stars, 0);
+const starRow = (n, of = 3) => '★'.repeat(n) + `<span class="off">${'★'.repeat(of - n)}</span>`;
+function openStages() { Music.start('lobby'); show('stages'); buildStages(); Cloud.later(200); }
+function buildStages() {
+  const box = $('#st-scroll'); box.innerHTML = '';
+  setText('st-stars', `${totalStars()} / ${STAGES.length * 3}`);
+  let nextIdx = STAGES.findIndex((s, i) => stageOpen(i) && stageRec(s.id).stars === 0);
+  CHAPTERS.forEach((c, ci) => {
+    const list = STAGES.filter(s => s.chapter === c.id); if (!list.length) return;
+    const got = list.reduce((a, s) => a + stageRec(s.id).stars, 0), firstIdx = STAGES.indexOf(list[0]);
+    const el = document.createElement('div'); el.className = 'chap' + (stageOpen(firstIdx) ? '' : ' locked'); el.style.setProperty('--c', c.color);
+    el.innerHTML = `<div class="chap-head"><b class="ol">CHAPTER ${ci + 1} · ${esc(c.name)}</b><small>${esc(c.sub)}</small><span class="cstars ol">⭐ ${got}/${list.length * 3}</span></div><div class="path"></div>`;
+    const path = el.querySelector('.path');
+    list.forEach((st, k) => {
+      const i = STAGES.indexOf(st), open = stageOpen(i), rec = stageRec(st.id);
+      const w = document.createElement('div'); w.className = 'node-wrap';
+      if (k > 0) w.innerHTML = '<div class="link"></div>';
+      const n = document.createElement('button');
+      n.className = 'node' + (st.type === 'boss' ? ' boss' : '') + (!open ? ' locked' : rec.stars ? ' done' : '') + (i === nextIdx ? ' next' : '');
+      n.innerHTML = `<span class="disc">${st.icon}</span><span class="num">${st.id}</span><span class="nm">${esc(st.name.replace('BOSS: ', ''))}</span><span class="stars">${starRow(rec.stars)}</span>`;
+      n.onclick = () => { click(); if (!open) { toast(`Get at least 1 ⭐ on stage ${STAGES[i - 1].id} first!`); return; } openStageCard(st); };
+      w.appendChild(n); path.appendChild(w);
+    });
+    box.appendChild(el);
+  });
+  const soon = document.createElement('div'); soon.className = 'soon'; soon.textContent = `🚧 CHAPTER ${CHAPTERS.length + 1} · COMING SOON`; box.appendChild(soon);
+}
+function openStageCard(st) {
+  if (App.scr !== 'stages') { show('stages'); buildStages(); }
+  const rec = stageRec(st.id), L = LV[st.math - 1];
+  $('#si-ico').textContent = st.icon; setText('si-num', `STAGE ${st.id}`); $('#si-name').textContent = st.name.toUpperCase(); $('#si-intro').textContent = st.intro;
+  const tags = [`🎯 ${stageGoalText(st)}`, `🧠 ${L.amc} · ${L.name}`];
+  if (st.lives || st.type !== 'grab' && st.type !== 'royale') tags.push(`❤️ ${st.lives || 3} lives`);
+  if (st.time && st.type !== 'survive') tags.push(`⏱️ ${Math.floor(st.time / 60)}:${String(st.time % 60).padStart(2, '0')}`);
+  if (st.topics) tags.push(`📚 Focus: ${st.topics.slice(0, 3).join(', ')}${st.topics.length > 3 ? '…' : ''}`);
+  if (rec.best != null) tags.push(`🏅 Best: ${rec.best} s`);
+  $('#si-tags').innerHTML = tags.map(t => `<span>${esc(t)}</span>`).join('');
+  $('#si-goals').innerHTML = st.stars.map((s, k) => `<div><span class="st">${k < rec.stars ? '★' : '<span class="off">★</span>'}</span>${esc(starText(s, st))}${k < rec.stars ? '<span class="ok">✓</span>' : ''}</div>`).join('') + `<div style="opacity:.8;font-size:13px">Each new ⭐ = +${TROPHIES_PER_STAR} 🏆</div>`;
+  $('#si-play').onclick = () => { click(); modal('m-stage', false); if (!Save.d.seenHow) { Save.d.seenHow = true; Save.save(); App.afterHow = () => startMatch(st); modal('m-how', true); return; } startMatch(st); };
+  modal('m-stage', true);
+}
+function showStageResults(res) {
+  const st = STAGES.find(s => s.id === res.stage), g = App.game, p = g.player, S = App.session, d = Save.d;
+  const cleared = res.outcome === 'clear' || res.outcome === 'win' || (res.outcome === 'place' && res.rank <= (st.clearRank || 3));
+  const r = { cleared, deaths: res.deaths, time: res.time, traps: res.traps, hp: res.hp, rank: res.rank };
+  const met = st.stars.map(s => starMet(s, r, S)), earned = met.filter(Boolean).length;
+  const rec = Object.assign({ stars: 0, best: null, clears: 0 }, d.stages[st.id]);
+  const newStars = Math.max(0, earned - rec.stars), before = d.trophies;
+  rec.stars = Math.max(rec.stars, earned);
+  if (cleared) { rec.clears++; rec.best = rec.best == null ? res.time : Math.min(rec.best, res.time); }
+  d.stages[st.id] = rec; d.trophies += newStars * TROPHIES_PER_STAR; d.games++; if (cleared) d.wins++;
+  const unlocked = HERO_ORDER.map(id => HEROES[id]).filter(h => h.unlock > before && h.unlock <= d.trophies);
+  Save.save(); Cloud.later(300);
+  const i = STAGES.indexOf(st), nx = STAGES[i + 1];
+  $('#res-title').textContent = cleared ? 'STAGE CLEAR!' : 'STAGE FAILED'; $('#res-title').style.color = cleared ? '#ffd23f' : '#ff6b6b';
+  $('#res-sub').textContent = cleared ? (newStars ? `You earned ${newStars} new star${newStars > 1 ? 's' : ''}!` : earned === 3 ? 'Perfect run!' : 'Try again for more stars!') : (res.why || 'Give it another go!') + ' Problems you solve make you stronger.';
+  const stars = $('#res-stars'); stars.classList.add('on'); stars.innerHTML = '<span>★</span><span>★</span><span>★</span>';
+  [...stars.children].forEach((e, k) => { if (k < earned) setTimeout(() => { e.classList.add('lit'); Sound.play('ready'); }, 500 + k * 450); });
+  const acc = S.asked ? Math.round(100 * S.correct / S.asked) + '%' : '–';
+  const rows = [['Time', `${res.time} s`], ['Knockouts', p.stats.ko], ['Problems solved', `${S.correct} / ${S.asked}`], ['Accuracy', acc]];
+  $('#res-stats').innerHTML = rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('');
+  const goals = $('#res-goals'); goals.classList.add('on');
+  goals.innerHTML = st.stars.map((s, k) => `<div class="${met[k] ? 'y' : 'n'}">${met[k] ? '✅' : '❌'} ${esc(starText(s, st))}</div>`).join('');
+  $('#res-trophy').textContent = newStars ? `+${newStars * TROPHIES_PER_STAR} 🏆  (${d.trophies})` : `🏆 ${d.trophies}`;
+  $('#res-unlock').innerHTML = unlocked.map(h => `<span>🎉 NEW HERO UNLOCKED: ${h.name}!</span>`).join(' ') + (cleared && nx && rec.clears === 1 ? `<span>🔓 Stage ${nx.id} is open!</span>` : '');
+  $('#btn-lobby span').textContent = 'STAGES'; $('#btn-again span').textContent = 'RETRY';
+  $('#btn-next').classList.toggle('on', !!(nx && stageOpen(i + 1)));
+  show('results'); Music.stop(); Sound.play(cleared ? 'win' : 'lose');
+  if (newStars) setTimeout(() => Sound.play('trophy'), 1900);
+  requestAnimationFrame(() => paintPortrait($('#res-hero'), p.hero, { bg1: '#fff6c9', bg2: cleared ? HEROES[p.hero].color : '#8a8fb0', feet: 0.88 }));
+}
+$('#btn-stages').onclick = () => { click(); openStages(); };
+
+// ---------- cloud save ----------
+function cloudDots() {
+  const st = Cloud.status;
+  for (const id of ['cloud-dot', 'cloud-dot2']) { const e = document.getElementById(id); if (e) e.className = 'dot ' + st; }
+  const txt = { idle: 'Not synced yet', syncing: '🔄 Saving…', ok: '✅ Saved to the cloud', offline: '📴 Can\'t reach the cloud right now. Progress is saved on this device and will upload later.', off: '📴 Cloud save is off here. Progress is saved on this device.' }[st];
+  const e = $('#cl-status'); if (e) e.textContent = txt + (st === 'ok' && Cloud.info && Cloud.info.devices > 1 ? ` · shared by ${Cloud.info.devices} devices` : '');
+}
+Cloud.onstatus = cloudDots;
+Cloud.onchange = () => { if (App.scr === 'lobby') refreshLobby(); if (App.scr === 'stages') buildStages(); };
+async function refreshCloudBox() {
+  cloudDots();
+  const code = await Cloud.myCode();
+  $('#cl-code').textContent = code || '';
+  $('#cl-make span').textContent = code ? 'MAKE A NEW CODE' : Cloud.info && Cloud.info.hasCode ? 'SHOW A NEW CODE' : 'GET MY SAVE CODE';
+  $('#cl-stop').style.display = Cloud.info && Cloud.info.hasCode ? '' : 'none';
+}
+function openCloud() { click(); $('#cl-msg').textContent = ''; modal('m-cloud', true); refreshCloudBox(); Cloud.sync().then(refreshCloudBox); }
+$('#btn-cloud').onclick = openCloud; $('#btn-cloud2').onclick = openCloud;
+$('#cl-make').onclick = async () => { click(); $('#cl-msg').textContent = ''; try { await Cloud.makeCode(); } catch (e) { $('#cl-msg').textContent = e.message; } refreshCloudBox(); };
+$('#cl-stop').onclick = async () => { click(); try { await Cloud.stopCode(); $('#cl-msg').textContent = 'Code turned off. Devices already using it stay connected.'; } catch (e) { $('#cl-msg').textContent = e.message; } refreshCloudBox(); };
+$('#cl-join').onclick = async () => {
+  click(); const v = $('#cl-input').value, m = $('#cl-msg');
+  if (Cloud.normalize(v).length !== 16) { m.textContent = 'A save code has 16 letters and numbers.'; return; }
+  m.textContent = 'Loading…';
+  try { await Cloud.join(v); $('#cl-input').value = ''; m.textContent = '✅ Save loaded! Your progress is now on this device.'; refreshLobby(); if (App.scr === 'stages') buildStages(); }
+  catch (e) { m.textContent = e.message; }
+  refreshCloudBox();
+};
+$('#cl-input').addEventListener('keydown', e => e.stopPropagation());
 
 // ---------- quiz ----------
 const KINDS = {
@@ -271,14 +421,15 @@ const KINDS = {
   charge: { badge: '⚡ BRAIN CHARGE', cls: 'charge', reward: 'Solve it → your <b>SUPER</b> is fully charged and your ammo refills!' },
   revive: { badge: '💫 QUICK REVIVE', cls: 'revive', reward: 'Solve it → jump right back into the fight!' },
   second: { badge: '❤️ SECOND CHANCE', cls: 'second', reward: 'Solve it → get back up with half your health! Miss it and you\'re out.' },
+  shield: { badge: '🛡️ SHIELD BREAKER', cls: 'shield', reward: 'Solve it → the boss\'s <b>MATH SHIELD</b> breaks and it gets stunned. Then attack!' },
   gym: { badge: '🏋️ BRAIN GYM', cls: 'gym', reward: 'Practice mode: no timer pressure. Every answer comes with a solution.' },
 };
 const Quiz = {
   isOpen: false, pad: null, padOn: false,
   open(kind, cb) {
     this.isOpen = true; this.kind = kind; this.cb = cb; this.done = false; this.result = null;
-    const lvl = Save.d.level, L = LV[lvl - 1];
-    this.q = BBMath.make(lvl); this.limit = kind === 'gym' ? 0 : L.time; this.t0 = performance.now(); this.elapsedPaused = 0;
+    const g = kind === 'gym' ? null : App.game, lvl = g ? g.level : Save.d.level, L = LV[lvl - 1];
+    this.lvl = lvl; this.q = BBMath.make(lvl, g && g.stage ? g.stage.topics : null); this.limit = kind === 'gym' ? 0 : L.time; this.t0 = performance.now(); this.elapsedPaused = 0;
     if (App.game) { App.game.paused = true; resetHeld(); }
     const K = KINDS[kind];
     $('.qhead').className = 'qhead ' + K.cls; $('#q-badge').textContent = K.badge; $('#q-level').textContent = `${L.amc} · ${L.name}`;
@@ -317,7 +468,7 @@ const Quiz = {
     const btns = $$('#q-choices .qc'); $('#q-choices').classList.add('done');
     btns.forEach((b, k) => { if (k === q.correct) b.classList.add('right'); else if (k === i) b.classList.add('wrong'); else b.classList.add('dim'); });
     // stats
-    const d = Save.d, lv = d.level; d.asked++; if (ok) d.correct++; d.lv[lv] = d.lv[lv] || { a: 0, c: 0 }; d.lv[lv].a++; if (ok) d.lv[lv].c++;
+    const d = Save.d, lv = this.lvl || d.level; d.asked++; if (ok) d.correct++; d.lv[lv] = d.lv[lv] || { a: 0, c: 0 }; d.lv[lv].a++; if (ok) d.lv[lv].c++;
     let streak;
     if (this.kind === 'gym') { const s = App.gym; s.a++; if (ok) { s.c++; s.streak++; } else s.streak = 0; streak = s.streak; }
     else { const S = App.session; S.asked++; if (ok) { S.correct++; S.streak++; S.best = Math.max(S.best, S.streak); } else S.streak = 0; streak = S.streak; }
@@ -493,4 +644,5 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 document.fonts && document.fonts.ready.then(() => { if (App.scr === 'lobby') refreshLobby(); });
-window.BB = { App, Quiz, Save };
+window.BB = { App, Quiz, Save, Cloud };
+Cloud.sync();

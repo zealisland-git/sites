@@ -38,12 +38,14 @@
           <div class="road-bar"><div id="road-fill"></div></div>
         </div>
         <div class="icons">
+          <button class="ibtn cloud" id="btn-cloud" title="Cloud save">☁️<i class="dot" id="cloud-dot"></i></button>
           <button class="ibtn" id="btn-how" title="How to play">?</button>
           <button class="ibtn" id="btn-sfx" title="Sound effects">🔊</button>
           <button class="ibtn" id="btn-music" title="Music">🎵</button>
         </div>
       </div>
       <div class="side">
+        <button class="btn green tall stagesbtn" id="btn-stages"><span class="emo">🗺️</span><span>ADVENTURE</span><small id="lb-advstars">⭐ 0</small></button>
         <button class="btn blue tall" id="btn-heroes"><canvas class="mini" id="mini-hero"></canvas><span>HEROES</span></button>
         <button class="btn purple tall" id="btn-gym"><span class="emo">🏋️</span><span>BRAIN GYM</span></button>
       </div>
@@ -76,6 +78,14 @@
       </div>
     </section>
 
+    <!-- ADVENTURE (stages) -->
+    <section id="stages" class="screen">
+      <div class="hdr"><button class="btn red back" data-back="lobby"><span>◀</span></button><h2 class="ol">ADVENTURE</h2>
+        <div class="pill trophy"><span class="ico">⭐</span><b id="st-stars">0</b></div>
+        <button class="ibtn cloud" id="btn-cloud2" title="Cloud save">☁️<i class="dot" id="cloud-dot2"></i></button></div>
+      <div class="st-scroll" id="st-scroll"></div>
+    </section>
+
     <!-- VS -->
     <section id="vs" class="screen">
       <div class="vs-mode ol" id="vs-mode">NUMBER GRAB</div>
@@ -90,22 +100,30 @@
     <!-- HUD -->
     <section id="hud" class="screen">
       <button class="ibtn pause" id="btn-pause" title="Pause">❚❚</button>
-      <div id="hud-grab" class="hud-top">
-        <div class="score">
+      <div id="hudtop" class="hud-top on">
+        <div class="score hx" id="sc-row">
           <div class="sc blue"><span class="gem"></span><b id="sc-a">0</b></div>
-          <div class="sc mid"><b id="sc-clock">2:30</b><small id="sc-cd"></small></div>
+          <div class="sc mid" id="sc-mid"><b id="sc-clock">2:30</b><small id="sc-cd"></small></div>
           <div class="sc red"><b id="sc-b">0</b><span class="gem"></span></div>
         </div>
-        <div class="rule" id="rule">
+        <div class="score hx" id="roy-row"><div class="sc mid wide"><b id="roy-left">6</b><small>PLAYERS LEFT</small></div></div>
+        <div class="score hx" id="obj-row">
+          <div class="obj"><span class="obj-ico" id="obj-ico">🤖</span><div class="obj-main"><div class="obj-txt" id="obj-txt">DEFEAT</div><div class="obj-bar"><div id="obj-fill"></div></div></div><b class="obj-num ol" id="obj-num">0/8</b></div>
+          <div class="sc mid hx" id="obj-clock"><b id="obj-time">2:00</b><small>TIME LEFT</small></div>
+          <div class="lives" id="lives"></div>
+        </div>
+        <div class="bossbar hx" id="bossbar">
+          <div class="bb-name ol" id="bb-name">CALCUTRON</div>
+          <div class="bb-bar"><div id="bb-fill"></div><span id="bb-hp"></span></div>
+          <div class="bb-shield" id="bb-shield">🛡️ MATH SHIELD UP · press Q or 🧠 to break it</div>
+        </div>
+        <div class="rule hx" id="rule">
           <div class="rule-lbl">GRAB ONLY</div>
           <div class="rule-txt ol" id="rule-txt">EVEN NUMBERS</div>
           <div class="rule-hint" id="rule-hint"></div>
           <div class="rule-bar"><div id="rule-fill"></div></div>
         </div>
-      </div>
-      <div id="hud-roy" class="hud-top">
-        <div class="score"><div class="sc mid wide"><b id="roy-left">6</b><small>PLAYERS LEFT</small></div></div>
-        <div class="rule small" id="roy-note"><div class="rule-hint" id="roy-hint">Break <b>?</b> crates → grab the cube → solve for POWER</div></div>
+        <div class="rule small hx" id="roy-note"><div class="rule-hint" id="roy-hint">Break <b>?</b> crates → grab the cube → solve for POWER</div></div>
       </div>
       <div id="feed"></div>
       <div id="banner"><div class="b-main ol" id="b-main"></div><div class="b-sub" id="b-sub"></div></div>
@@ -126,15 +144,18 @@
     <section id="results" class="screen">
       <div class="res-title ol" id="res-title">VICTORY!</div>
       <div class="res-sub" id="res-sub"></div>
+      <div class="res-stars" id="res-stars"></div>
       <div class="res-body panel">
         <canvas id="res-hero"></canvas>
         <div class="res-stats" id="res-stats"></div>
+        <div class="res-goals" id="res-goals"></div>
       </div>
       <div class="res-trophy ol" id="res-trophy">+10 🏆</div>
       <div class="res-unlock" id="res-unlock"></div>
       <div class="res-btns">
         <button class="btn blue" id="btn-lobby"><span>LOBBY</span></button>
         <button class="btn yellow" id="btn-again"><span>PLAY AGAIN</span></button>
+        <button class="btn green" id="btn-next"><span>NEXT STAGE ▶</span></button>
       </div>
     </section>
 
@@ -163,6 +184,7 @@
         <div class="how-c"><div class="how-i">❓</div><b>Brain Cubes</b><p>Break purple <b>?</b> crates. Grab the cube and solve an AMC 8 style problem for +10% health and damage.</p></div>
         <div class="how-c"><div class="how-i">🧠</div><b>Brain Charge</b><p>Press <b>Q</b> (or the 🧠 button) any time: solve a problem to fully charge your SUPER.</p></div>
         <div class="how-c"><div class="how-i">💫</div><b>Comebacks</b><p>Knocked out? Solve a problem to respawn instantly. In Royale you get one Second Chance.</p></div>
+        <div class="how-c"><div class="how-i">🗺️</div><b>Adventure</b><p>Play stages one by one, earn up to 3 ⭐ each, and beat the bosses. Progress is saved to the cloud.</p></div>
         <div class="how-c"><div class="how-i">✏️</div><b>Scratch pad</b><p>Hard problem? Open the scratch pad and work it out. The game is paused while you think.</p></div>
       </div>
       <button class="btn yellow" data-close id="how-ok"><span>LET'S GO!</span></button>
@@ -173,6 +195,33 @@
       <button class="btn yellow" id="btn-resume"><span>RESUME</span></button>
       <button class="btn blue" id="btn-howp"><span>HOW TO PLAY</span></button>
       <button class="btn red" id="btn-quit"><span>QUIT MATCH</span></button>
+    </div></div>
+
+    <div id="m-stage" class="modal"><div class="mbox panel stage-info">
+      <div class="si-top"><span class="si-ico" id="si-ico">🤖</span><div><small id="si-num">STAGE 1-1</small><h3 class="ol" id="si-name">BOOT CAMP</h3></div></div>
+      <p class="si-intro" id="si-intro"></p>
+      <div class="si-tags" id="si-tags"></div>
+      <div class="si-goals" id="si-goals"></div>
+      <div class="si-btns"><button class="btn red" data-close><span>BACK</span></button><button class="btn yellow" id="si-play"><span>PLAY ▶</span></button></div>
+    </div></div>
+
+    <div id="m-cloud" class="modal"><div class="mbox panel cloudbox">
+      <h3 class="ol">☁️ CLOUD SAVE</h3>
+      <div class="cl-status" id="cl-status">Checking…</div>
+      <p class="cl-p">Your stars, trophies and heroes are saved online automatically. Nothing to sign up for. To play on another device, use a save code.</p>
+      <div class="cl-sec">
+        <b>Play on another device</b>
+        <div class="cl-code" id="cl-code"></div>
+        <div class="cl-row"><button class="btn blue" id="cl-make"><span>GET MY SAVE CODE</span></button><button class="tbtn" id="cl-stop">Turn code off</button></div>
+        <small id="cl-warn">Keep the code secret, like a password. Anyone who has it can load and change this progress.</small>
+      </div>
+      <div class="cl-sec">
+        <b>Have a code from another device?</b>
+        <div class="cl-row"><input id="cl-input" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn green" id="cl-join"><span>LOAD</span></button></div>
+        <small>Loading a code moves this device onto that save. Stage stars from both are kept.</small>
+      </div>
+      <div class="cl-msg" id="cl-msg"></div>
+      <button class="btn red" data-close><span>CLOSE</span></button>
     </div></div>
 
     <!-- QUIZ -->
@@ -205,6 +254,8 @@
 
   <script src="math.js"></script>
   <script src="core.js"></script>
+  <script src="stages.js"></script>
+  <script src="cloud.js"></script>
   <script src="world.js"></script>
   <script src="ui.js"></script>
 </body>

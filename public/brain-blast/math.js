@@ -575,10 +575,14 @@
     return { q: p.q, choices: all.map(c => c.html), correct: all.findIndex(c => c.ok), why: p.why, answer: keyA };
   }
 
-  function make(level) {
+  // topics (optional): only use problem types whose topic is in this list (a stage's math focus)
+  function make(level, topics) {
     level = Math.max(1, Math.min(5, level | 0));
-    const pool = [];
-    for (const g of G) { if (g.lv === level) pool.push(g, g, g); else if (g.lv === level - 1) pool.push(g); }
+    let pool = [];
+    const want = Array.isArray(topics) && topics.length ? new Set(topics) : null;
+    for (const g of G) { if (want && !want.has(g.topic)) continue; if (g.lv === level) pool.push(g, g, g); else if (g.lv === level - 1) pool.push(g); }
+    if (want && !pool.length) for (const g of G) if (want.has(g.topic) && g.lv <= level + 1) pool.push(g);
+    if (!pool.length) for (const g of G) { if (g.lv === level) pool.push(g, g, g); else if (g.lv === level - 1) pool.push(g); }
     for (let tries = 0; tries < 60; tries++) {
       const g = pick(pool);
       let p = null;
@@ -633,11 +637,18 @@
       { t: 'DIGIT SUM IS PRIME', hint: 'add the digits, is it prime?', f: n => isPrime(digitSum(n)), why: n => `digits add to ${digitSum(n)}, not prime` },
     ] },
   };
-  function pickRule(level, prev) {
-    const L = RULES[Math.max(1, Math.min(5, level))];
-    let r; do { r = pick(L.list); } while (prev && r.t === prev.t && L.list.length > 1);
-    return Object.assign({ max: L.max }, r);
+  // names (optional): pick only from these rules (by their title), from any level
+  function pickRule(level, prev, names) {
+    let list, max;
+    if (Array.isArray(names) && names.length) {
+      list = []; for (const lv of [1, 2, 3, 4, 5]) for (const r of RULES[lv].list) if (names.includes(r.t)) list.push(Object.assign({ max: Math.max(RULES[lv].max, RULES[Math.max(1, Math.min(5, level))].max) }, r));
+    }
+    if (!list || !list.length) { const L = RULES[Math.max(1, Math.min(5, level))]; list = L.list.map(r => Object.assign({ max: L.max }, r)); }
+    let r, guard = 0; do { r = pick(list); } while (prev && r.t === prev.t && list.length > 1 && guard++ < 20);
+    return Object.assign({}, r);
   }
+  const topics = () => Array.from(new Set(G.map(g => g.topic)));
+  const ruleNames = () => [1, 2, 3, 4, 5].flatMap(lv => RULES[lv].list.map(r => r.t));
   function gemNumber(rule, wantGood) {
     const good = [], bad = [];
     for (let n = 1; n <= rule.max; n++) (rule.f(n) ? good : bad).push(n);
@@ -658,5 +669,5 @@
     { n: 5, name: 'LEGEND', amc: 'AMC 8 #21–25', color: '#ff5ad8', time: 100 },
   ];
 
-  global.BBMath = { make, pickRule, gemNumber, LEVELS, _G: G, _finalize: finalize };
+  global.BBMath = { make, pickRule, gemNumber, LEVELS, topics, ruleNames, _G: G, _finalize: finalize };
 })(typeof window !== 'undefined' ? window : globalThis);

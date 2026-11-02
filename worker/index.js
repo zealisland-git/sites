@@ -8,6 +8,10 @@
 //   - A collection can have a sync code. Entering that code on another device
 //     moves that device into the same collection.
 // Keys and codes are only stored as SHA-256 hashes.
+//
+// /api/brain-blast/* saves Brain Blast Arena progress: see brain-blast.js.
+
+import { brainBlast } from './brain-blast.js';
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -211,6 +215,15 @@ export default {
       } catch (err) {
         console.error('ascii-art api error', err && err.stack || err);
         return fail(500, 'Something went wrong on the server. Your art is still saved on this device.');
+      }
+    }
+    const bb = /^\/api\/brain-blast\/(.+)$/.exec(url.pathname);
+    if (bb) {
+      try {
+        return await brainBlast(request, env, bb[1].replace(/\/+$/, ''));
+      } catch (err) {
+        console.error('brain-blast api error', err && err.stack || err);
+        return fail(500, 'Something went wrong on the server. Your progress is still saved on this device.');
       }
     }
     if (url.pathname.startsWith('/api/')) return fail(404, 'Unknown API.');

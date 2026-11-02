@@ -15,9 +15,10 @@ const FONT = '"Lilita One", "Arial Black", Impact, sans-serif';
 // ---------- save data (per browser) ----------
 const Save = {
   key: 'brain-blast-arena-v1',
-  d: { trophies: 0, hero: 'blaze', level: 2, mode: 'grab', sfx: true, music: true, asked: 0, correct: 0, wins: 0, games: 0, bestStreak: 0, seenHow: false, lv: {}, seenUnlock: {} },
-  load() { try { const s = JSON.parse(localStorage.getItem(this.key) || 'null'); if (s && typeof s === 'object') Object.assign(this.d, s); } catch (e) { /* private mode */ } },
-  save() { try { localStorage.setItem(this.key, JSON.stringify(this.d)); } catch (e) { /* ignore */ } },
+  d: { trophies: 0, hero: 'blaze', level: 2, mode: 'grab', sfx: true, music: true, asked: 0, correct: 0, wins: 0, games: 0, bestStreak: 0, seenHow: false, lv: {}, seenUnlock: {}, stages: {}, updated: 0 },
+  load() { try { const s = JSON.parse(localStorage.getItem(this.key) || 'null'); if (s && typeof s === 'object') Object.assign(this.d, s); } catch (e) { /* private mode */ } if (!this.d.stages || typeof this.d.stages !== 'object') this.d.stages = {}; },
+  // touch = false when copying data in from the cloud (so it does not count as a new change)
+  save(touch = true) { if (touch) this.d.updated = Date.now(); try { localStorage.setItem(this.key, JSON.stringify(this.d)); } catch (e) { /* ignore */ } },
 };
 Save.load();
 
@@ -144,6 +145,21 @@ const HEROES = {
     blurb: 'Lobs exploding pies over walls. Super: a storm of 7 pies (3.14 was not enough).', bars: { hp: 2, dmg: 4, range: 4, speed: 3 } },
 };
 const HERO_ORDER = ['blaze', 'rocky', 'luna', 'volt', 'pi'];
+// Enemies used by stages. They are never offered as playable heroes.
+// draw: which drawing to use; scale: size; boss: has a Math Shield and its own attack patterns.
+const NO_SUPER = { type: 'dash', name: '', dmg: 0, range: 3 };
+Object.assign(HEROES, {
+  robo: { id: 'robo', name: 'ROBO', title: 'Training Robot', role: 'Minion', color: '#ff5a5a', hp: 1700, speed: 185, unlock: 1e9, superCharge: 1e12, minion: true, draw: 'robo',
+    atk: { type: 'burst', dmg: 240, count: 1, range: 6.5, speed: 800, reload: 1.6, r: 9, color: '#ff8080' }, sup: NO_SUPER, bars: { hp: 1, dmg: 1, range: 2, speed: 3 } },
+  zapbot: { id: 'zapbot', name: 'ZAPBOT', title: 'Sniper Robot', role: 'Minion', color: '#38b6ff', hp: 1300, speed: 175, unlock: 1e9, superCharge: 1e12, minion: true, draw: 'robo',
+    atk: { type: 'laser', dmg: 520, count: 1, range: 9, speed: 1350, reload: 2.4, r: 8, pierce: true, color: '#9ffcff' }, sup: NO_SUPER, bars: { hp: 1, dmg: 2, range: 4, speed: 3 } },
+  brute: { id: 'brute', name: 'BRUTE', title: 'Tank Robot', role: 'Minion', color: '#ff9f1c', hp: 3600, speed: 160, scale: 1.25, unlock: 1e9, superCharge: 1e12, minion: true, draw: 'brute',
+    atk: { type: 'shotgun', dmg: 240, count: 4, spread: 0.5, range: 3.8, speed: 900, reload: 1.8, r: 8, color: '#ffc46b' }, sup: NO_SUPER, bars: { hp: 3, dmg: 2, range: 1, speed: 2 } },
+  calcutron: { id: 'calcutron', name: 'CALCUTRON', title: 'Calculator Robot Boss', role: 'Boss', color: '#7f93c4', hp: 20000, speed: 110, scale: 2.1, unlock: 1e9, superCharge: 1e12, boss: true, draw: 'boss', variant: 'calc',
+    atk: { type: 'burst', dmg: 300, count: 1, range: 9, speed: 650, reload: 1, r: 12, color: '#ffd23f' }, sup: NO_SUPER, bars: { hp: 5, dmg: 3, range: 4, speed: 1 } },
+  fractionator: { id: 'fractionator', name: 'THE FRACTIONATOR', title: 'Fraction Robot Boss', role: 'Boss', color: '#9b5cff', hp: 28000, speed: 120, scale: 2.2, unlock: 1e9, superCharge: 1e12, boss: true, draw: 'boss', variant: 'frac',
+    atk: { type: 'burst', dmg: 300, count: 1, range: 9, speed: 650, reload: 1, r: 12, color: '#ff8be6' }, sup: NO_SUPER, bars: { hp: 5, dmg: 4, range: 4, speed: 1 } },
+});
 const BOT_NAMES = ['Al Gebra', 'Sir Cumference', 'Hypotenoose', 'Sum Ting', 'Polly Gon', 'Rad Ical', 'Tan Gent', 'Cos Mo', 'Frac Tal', 'Dee Vide', 'Mean Mo', 'Theo Rem', 'Pi Rate', 'Ex Ponent', 'Matrix', 'Prime Time', 'Count Dracula', 'Isosceles', 'Al Gorithm', 'Ray Dius', 'Vertex', 'Infinity', 'Decimal Dan', 'Quad Ratic'];
 
 // ---------- drawing helpers ----------
@@ -338,6 +354,60 @@ const HERO_DRAW = {
   },
 };
 
+HERO_DRAW.robo = function (ctx, a) {
+  const { t, la, bob, step } = a, col = a.color;
+  const gun = () => { ctx.save(); ctx.translate(11, -22 + bob); ctx.rotate(la); ctx.translate(-a.recoil * 5, 0); rrect(ctx, 0, -4.5, 21, 9, 3); fs(ctx, '#4a4f66'); rrect(ctx, 16, -6, 7, 12, 3); fs(ctx, col, 2.5); ctx.restore(); };
+  if (a.back) gun();
+  circ(ctx, -9 + step * 3, -6, 6); fs(ctx, '#3a3f55'); circ(ctx, 9 - step * 3, -6, 6); fs(ctx, '#3a3f55');
+  ctx.save(); ctx.translate(0, bob);
+  ctx.beginPath(); ctx.moveTo(-2, -46); ctx.lineTo(-4, -58); ctx.lineWidth = 3; ctx.strokeStyle = OUT; ctx.stroke();
+  circ(ctx, -4, -60, 4); fs(ctx, Math.sin(t * 6) > 0 ? '#ffe14d' : '#fff', 2.5);
+  circ(ctx, 0, -28, 20); fs(ctx, col);
+  ell(ctx, -7, -38, 8, 5, -0.5); ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
+  rrect(ctx, -11, -19, 20, 8, 4); fs(ctx, '#e9ecf5', 2);
+  circ(ctx, 5, -31, 9.5); fs(ctx, '#fff', 2.5);
+  if (a.blink) { ctx.beginPath(); ctx.moveTo(-1, -31); ctx.lineTo(11, -31); ctx.lineWidth = 2.5; ctx.strokeStyle = OUT; ctx.stroke(); }
+  else { const px = 5 + Math.cos(la) * 3.5, py = -31 + Math.sin(la) * 3; circ(ctx, px, py, 4.8); ctx.fillStyle = OUT; ctx.fill(); circ(ctx, px + 1.5, py - 1.5, 1.6); ctx.fillStyle = '#fff'; ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(-2, -42); ctx.lineTo(13, -39); ctx.lineWidth = 3; ctx.strokeStyle = OUT; ctx.stroke();
+  ctx.restore();
+  if (!a.back) gun();
+};
+HERO_DRAW.brute = function (ctx, a) {
+  const { la, bob, step } = a, col = a.color;
+  const can = () => { ctx.save(); ctx.translate(12, -26 + bob); ctx.rotate(la); ctx.translate(-a.recoil * 6, 0); rrect(ctx, 0, -8, 26, 16, 6); fs(ctx, '#4a4f66'); rrect(ctx, 20, -10, 9, 20, 4); fs(ctx, col, 2.5); ctx.restore(); };
+  if (a.back) can();
+  rrect(ctx, -22, -13, 44, 13, 6); fs(ctx, '#3a3f55');
+  for (let i = 0; i < 4; i++) { circ(ctx, -15 + i * 10 + (step * 2) % 2, -6.5, 3); fs(ctx, '#6b7190', 1.5); }
+  ctx.save(); ctx.translate(0, bob);
+  rrect(ctx, -19, -48, 38, 37, 10); fs(ctx, col);
+  rrect(ctx, -13, -43, 28, 12, 5); fs(ctx, OUT, 0);
+  const e = a.blink ? 1.5 : 4.5; rrect(ctx, -7, -39.5, 7, e, 2); fs(ctx, '#ffe14d', 0); rrect(ctx, 5, -39.5, 7, e, 2); fs(ctx, '#ffe14d', 0);
+  rrect(ctx, -10, -26, 20, 9, 3); fs(ctx, 'rgba(0,0,0,0.18)', 0);
+  ctx.restore();
+  if (!a.back) can();
+};
+HERO_DRAW.boss = function (ctx, a) {
+  const { t, la, bob, step } = a, col = a.color, frac = a.variant === 'frac';
+  const arm = () => { ctx.save(); ctx.translate(20, -38 + bob); ctx.rotate(la); ctx.translate(-a.recoil * 6, 0); rrect(ctx, 0, -9, 32, 18, 7); fs(ctx, '#4a4f66'); rrect(ctx, 26, -11, 10, 22, 4); fs(ctx, frac ? '#ff8be6' : '#ffd23f', 2.5); ctx.restore(); };
+  if (a.back) arm();
+  rrect(ctx, -30 + step * 2, -15, 26, 15, 6); fs(ctx, '#2c3146'); rrect(ctx, 4 - step * 2, -15, 26, 15, 6); fs(ctx, '#2c3146');
+  ctx.save(); ctx.translate(0, bob);
+  circ(ctx, -30, -38, 9); fs(ctx, '#4a4f66');
+  rrect(ctx, -27, -62, 54, 50, 12); fs(ctx, col);
+  rrect(ctx, -20, -57, 40, 17, 5); fs(ctx, frac ? '#2a1748' : '#173a26', 2.5);
+  const msgs = frac ? ['1/2', '3/4', '5/8', '2/3', '7/9'] : ['3.1415', '7×8=56', '√144', '2+2=4', '9²=81'];
+  txt(ctx, msgs[Math.floor(t / 1.3) % msgs.length], 0, -48.5, frac ? 12 : 9, frac ? '#ff9be6' : '#7dff9a', 'center', 0);
+  if (frac) { circ(ctx, 0, -33, 2.6); fs(ctx, '#fff', 1.5); rrect(ctx, -9, -28.5, 18, 3.5, 1.5); fs(ctx, '#fff', 1.5); circ(ctx, 0, -21.5, 2.6); fs(ctx, '#fff', 1.5); }
+  else { const cs = ['#ff6b6b', '#ffd23f', '#7dff6a', '#5ec8ff', '#ff8be6', '#fff']; for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { rrect(ctx, -17 + i * 12, -35 + j * 9, 10, 6, 2); fs(ctx, cs[i + j * 3], 1.5); } }
+  rrect(ctx, -17, -79, 34, 19, 7); fs(ctx, col);
+  if (frac) { ctx.beginPath(); ctx.moveTo(-15, -76); ctx.lineTo(-22, -90); ctx.lineTo(-8, -79); ctx.closePath(); fs(ctx, '#ff8be6', 2.5); ctx.beginPath(); ctx.moveTo(15, -76); ctx.lineTo(22, -90); ctx.lineTo(8, -79); ctx.closePath(); fs(ctx, '#ff8be6', 2.5); }
+  else { ctx.beginPath(); ctx.moveTo(0, -79); ctx.lineTo(0, -88); ctx.lineWidth = 3; ctx.strokeStyle = OUT; ctx.stroke(); circ(ctx, 0, -90, 4); fs(ctx, Math.sin(t * 5) > 0 ? '#ff4f6a' : '#ffd23f', 2.5); }
+  const eh = a.blink ? 1.5 : 5; rrect(ctx, -11, -73, 9, eh, 2); fs(ctx, '#ff4f6a', 0); rrect(ctx, 4, -73, 9, eh, 2); fs(ctx, '#ff4f6a', 0);
+  ctx.beginPath(); ctx.moveTo(-13, -77); ctx.lineTo(-2, -74); ctx.moveTo(15, -77); ctx.lineTo(4, -74); ctx.lineWidth = 3; ctx.strokeStyle = OUT; ctx.stroke();
+  ctx.restore();
+  if (!a.back) arm();
+};
+
 // draw a hero with its feet at (x, y)
 function drawHero(ctx, id, o) {
   const s = o.s || 1, t = o.t || 0, aim = o.aim == null ? 0.25 : o.aim;
@@ -350,7 +420,8 @@ function drawHero(ctx, id, o) {
   const blink = ((t + (o.seed || 0)) % 3.6) < 0.12;
   if (o.squash) ctx.scale(1 + o.squash * 0.12, 1 - o.squash * 0.12);
   ctx.scale(face, 1);
-  HERO_DRAW[id](ctx, { t, la, bob, step: moving ? Math.sin(ph) : 0, back: Math.sin(aim) < -0.45, recoil: o.recoil || 0, blink });
+  const H = HEROES[id];
+  HERO_DRAW[H.draw || id](ctx, { t, la, bob, step: moving ? Math.sin(ph) : 0, back: Math.sin(aim) < -0.45, recoil: o.recoil || 0, blink, color: o.color || H.color, variant: H.variant });
   ctx.restore();
 }
 

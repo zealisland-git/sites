@@ -41,6 +41,8 @@ Do not touch other sites' folders unless asked.
   table-name prefix in the shared D1 database (binding `DB`). Example: ASCII Art Studio uses
   `/api/ascii-art/` and tables `aa_libraries`, `aa_devices`, `aa_items`. Tables are created by
   the Worker itself (`CREATE TABLE IF NOT EXISTS`), so there is no migration step.
+  Brain Blast Arena uses `/api/brain-blast/` and tables `bb_players`, `bb_devices`, `bb_stages`
+  (code in `worker/brain-blast.js`; its stages are data in `public/brain-blast/stages.js`).
 - Pages call the API with relative URLs, e.g. `new URL('../api/ascii-art/', location.href)`.
 - API responses must send `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store`
   (`_headers` only covers static files).
