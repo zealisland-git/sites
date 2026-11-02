@@ -379,12 +379,14 @@ function openStageCard(st) {
   if (App.scr !== 'stages') { show('stages'); buildStages(); }
   const rec = stageRec(st.id), L = LV[st.math - 1];
   $('#si-ico').textContent = st.icon; setText('si-num', `STAGE ${st.id}`); $('#si-name').textContent = st.name.toUpperCase(); $('#si-intro').textContent = st.intro;
-  const tags = [`🎯 ${stageGoalText(st)}`, `🧠 Math LV ${L.n} · ${L.name}`];
+  const tags = [`🎯 ${stageGoalText(st)}`, `📚 ${st.topicName}`];
   if (st.lives || st.type !== 'grab' && st.type !== 'royale') tags.push(`❤️ ${st.lives || 3} lives`);
   if (st.time && st.type !== 'survive') tags.push(`⏱️ ${Math.floor(st.time / 60)}:${String(st.time % 60).padStart(2, '0')}`);
-  if (st.topics) tags.push(`📚 Focus: ${st.topics.slice(0, 3).join(', ')}${st.topics.length > 3 ? '…' : ''}`);
   if (rec.best != null) tags.push(`🏅 Best: ${rec.best} s`);
   $('#si-tags').innerHTML = tags.map(t => `<span>${esc(t)}</span>`).join('');
+  const S = st.sub && BB_CONTENT.subs[st.sub], rec2 = st.subs.reduce((a, id) => { const x = Save.d.subStats[id]; if (x) { a.a += x.a; a.c += x.c; } return a; }, { a: 0, c: 0 });
+  $('#si-key').innerHTML = S ? `💡 <b>Key idea:</b> ${esc(S.key)}` : `💡 Problems from: ${st.subs.map(id => esc(SHORT[id] || id)).join(', ')}`;
+  if (rec2.a) $('#si-key').innerHTML += `<br>📈 Your record here: ${Math.round(100 * rec2.c / rec2.a)}% right first try (${rec2.a} problems)`;
   $('#si-goals').innerHTML = st.stars.map((s, k) => `<div><span class="st">${k < rec.stars ? '★' : '<span class="off">★</span>'}</span>${esc(starText(s, st))}${k < rec.stars ? '<span class="ok">✓</span>' : ''}</div>`).join('') + `<div style="opacity:.8;font-size:13px">Each new ⭐ = +${TROPHIES_PER_STAR} 🏆</div>`;
   $('#si-play').onclick = () => { click(); modal('m-stage', false); if (!Save.d.seenHow) { Save.d.seenHow = true; Save.save(); App.afterHow = () => startMatch(st); modal('m-how', true); return; } startMatch(st); };
   modal('m-stage', true);
@@ -461,19 +463,43 @@ const KINDS = {
   shield: { badge: '🛡️ SHIELD SMASHER', cls: 'shield', reward: 'Solve it → the <b>MATH SHIELD</b> smashes and the enemy takes <b>+25% damage</b> for a while. Fast answer = longer!' },
   gym: { badge: '🏋️ BRAIN GYM', cls: 'gym', reward: 'Practice mode: no timer pressure. Every answer comes with a solution.' },
 };
+// ---------- problems from the content templates ----------
+const ALL_SUBS = Object.keys(BB_CONTENT.subs);
+const LEVEL_DIFF = [1, 1.4, 2, 2.5, 3];
+const Problems = {
+  topicOf: sid => BB_CONTENT.topics.find(t => t.id === BB_CONTENT.subs[sid].topic),
+  // aim a little above or below the stage's difficulty, following how this player is doing
+  target(base) { const r = Save.d.mrating || Save.d.level || 2; return clamp(base + (r - 2.5) * 0.45, 1, 3); },
+  from(subs, target) {
+    subs = subs.filter(s => BB_CONTENT.subs[s]);
+    for (let k = 0; k < 10 && subs.length; k++) {
+      const sid = choice(subs), S = BB_CONTENT.subs[sid], ts = S.templates;
+      const w = ts.map(t => Math.exp(-1.6 * Math.abs(t.diff - target)));
+      let r = Math.random() * w.reduce((a, b) => a + b, 0), t = ts[0];
+      for (let i = 0; i < ts.length; i++) { r -= w[i]; if (r <= 0) { t = ts[i]; break; } }
+      const p = BBFormula.make(t);
+      if (p) return Object.assign(p, { sub: sid, topic: `${this.topicOf(sid).name} · ${S.name}`, key: S.key });
+    }
+    return null;
+  },
+  forGame(g) { return g && g.stage && g.stage.subs ? this.from(g.stage.subs, this.target(g.stage.diff || 1.5)) : this.from(ALL_SUBS, LEVEL_DIFF[(g ? g.level : Save.d.level) - 1]); },
+  gymSubs() { const pick = Save.d.gymSub || 'all'; if (pick === 'all') return ALL_SUBS; const t = BB_CONTENT.topics.find(x => 't' + x.id === pick); return t ? t.subs : BB_CONTENT.subs[pick] ? [pick] : ALL_SUBS; },
+  forGym() { return this.from(this.gymSubs(), LEVEL_DIFF[Save.d.level - 1]); },
+};
 const Quiz = {
   isOpen: false, pad: null, padOn: false,
   open(kind, cb) {
     this.isOpen = true; this.kind = kind; this.cb = cb; this.done = false; this.result = null; this.tries = 0; this.firstWrong = -1;
-    const g = kind === 'gym' ? null : App.game;
-    // Stages adapt: the level follows how this player is doing, within 1 of the stage's level
-    let lvl = g ? g.level : Save.d.level;
-    if (g && g.stage) lvl = clamp(Math.round(Save.d.mrating || Save.d.level || 2), Math.max(1, g.stage.math - 1), Math.min(5, g.stage.math + 1));
-    const L = LV[lvl - 1];
-    this.lvl = lvl; this.q = BBMath.make(lvl, g && g.stage ? g.stage.topics : null); this.limit = kind === 'gym' ? 0 : L.time; this.t0 = performance.now(); this.elapsedPaused = 0;
+    const g = kind === 'gym' ? null : App.game, lvl = g ? g.level : Save.d.level;
+    let p = kind === 'gym' ? Problems.forGym() : Problems.forGame(g);
+    if (!p) { p = BBMath.make(lvl); p.secs = LV[lvl - 1].time / 2.5; p.diff = 2; }
+    this.lvl = lvl; this.q = p; this.t0 = performance.now();
+    this.limit = kind === 'gym' ? 0 : clamp(Math.round((p.secs || 30) * 2.5), 30, 150);
+    this.fastT = Math.max(8, (p.secs || 20) + 3);
     if (App.game) { App.game.paused = true; resetHeld(); }
     const K = KINDS[kind];
-    $('.qhead').className = 'qhead ' + K.cls; $('#q-badge').textContent = K.badge; $('#q-level').textContent = `LV ${L.n} · ${L.name}`;
+    const dv = clamp(p.diff || 2, 1, 3);
+    $('.qhead').className = 'qhead ' + K.cls; $('#q-badge').textContent = K.badge; $('#q-level').innerHTML = `${'★'.repeat(dv)}<span style="opacity:.3">${'★'.repeat(3 - dv)}</span> ${['', 'WARM-UP', 'CHALLENGE', 'HARD'][dv]}`;
     $('#q-reward').innerHTML = K.reward; $('#q-topic').textContent = this.q.topic;
     $('#q-text').innerHTML = this.q.q;
     const box = $('#q-choices'); box.className = 'qchoices'; box.innerHTML = '';
@@ -491,7 +517,9 @@ const Quiz = {
     const gy = $('#q-gym'); gy.classList.toggle('on', this.kind === 'gym');
     if (this.kind !== 'gym') return;
     const s = App.gym || (App.gym = { a: 0, c: 0, streak: 0 });
-    gy.innerHTML = LV.map(L => `<button class="lvp${Save.d.level === L.n ? ' sel' : ''}" data-l="${L.n}" style="background:${L.color}">${'★'.repeat(L.n)} ${L.name}</button>`).join('') + `<span class="gscore">✅ ${s.c}/${s.a} · 🔥 ${s.streak}</span><button class="tbtn" id="gym-done">Done</button>`;
+    const opts = ['<option value="all">All topics</option>'].concat(BB_CONTENT.topics.map(t => `<optgroup label="${esc(t.name)}"><option value="t${t.id}">All of: ${esc(t.name)}</option>${t.subs.map(id => { const st = Save.d.subStats[id]; return `<option value="${id}">${id} ${esc(BB_CONTENT.subs[id].name)}${st && st.a ? ` (${Math.round(100 * st.c / st.a)}%)` : ''}</option>`; }).join('')}</optgroup>`));
+    gy.innerHTML = `<select id="gym-topic" title="Topic">${opts.join('')}</select>` + LV.map(L => `<button class="lvp${Save.d.level === L.n ? ' sel' : ''}" data-l="${L.n}" style="background:${L.color}">${'★'.repeat(L.n)} ${L.name}</button>`).join('') + `<span class="gscore">✅ ${s.c}/${s.a} · 🔥 ${s.streak}</span><button class="tbtn" id="gym-done">Done</button>`;
+    const sel = $('#gym-topic'); sel.value = Problems.gymSubs() === ALL_SUBS ? 'all' : Save.d.gymSub; sel.onchange = () => { click(); Save.d.gymSub = sel.value; Save.save(); this.open('gym'); };
     gy.querySelectorAll('.lvp').forEach(b => b.onclick = () => { click(); Save.d.level = +b.dataset.l; Save.save(); this.open('gym'); });
     $('#gym-done').onclick = () => { click(); this.isOpen = false; modal('quiz', false); show('lobby'); refreshLobby(); };
   },
@@ -510,17 +538,19 @@ const Quiz = {
       this.tries = 1; this.firstWrong = i;
       const b = $$('#q-choices .qc')[i]; if (b) { b.classList.add('wrong', 'out'); b.disabled = true; }
       const res = $('#q-result');
-      res.innerHTML = `<span class="big">🤔 Not quite! One more try…</span>Take another look. Solve it now and you still get ${this.kind === 'cube' ? '+1 POWER' : 'the reward'}${this.kind === 'cube' || this.kind === 'charge' || this.kind === 'shield' ? ' (a bit smaller)' : ''}.`;
+      const slip = q.whyWrong && q.whyWrong[i];
+      res.innerHTML = `<span class="big">🤔 Not quite! One more try…</span>${slip ? `That's the answer you get if someone ${esc(slip)}. ` : 'Take another look. '}Solve it now and you still get ${this.kind === 'cube' ? '+1 POWER' : 'the reward'}${this.kind === 'cube' || this.kind === 'charge' || this.kind === 'shield' ? ' (a bit smaller)' : ''}.`;
       res.className = 'qresult on retry'; Sound.play('wrong', 1.3);
       return;
     }
     this.done = true;
-    const retry = this.tries > 0, secs = (performance.now() - this.t0) / 1000, fast = ok && !retry && this.limit && secs < this.limit * 0.35;
+    const retry = this.tries > 0, secs = (performance.now() - this.t0) / 1000, fast = ok && !retry && this.limit && secs < this.fastT;
     this.result = { ok, fast, retry };
     const btns = $$('#q-choices .qc'); $('#q-choices').classList.add('done');
     btns.forEach((b, k) => { if (k === q.correct) b.classList.add('right'); else if (k === i || k === this.firstWrong) b.classList.add('wrong'); else b.classList.add('dim'); });
     // stats: accuracy counts first tries; "solved" counts both
     const d = Save.d, lv = this.lvl || d.level, first = ok && !retry; d.asked++; if (first) d.correct++; d.lv[lv] = d.lv[lv] || { a: 0, c: 0 }; d.lv[lv].a++; if (first) d.lv[lv].c++;
+    if (q.sub) { const ss = d.subStats[q.sub] || (d.subStats[q.sub] = { a: 0, c: 0 }); ss.a++; if (first) ss.c++; }
     let streak;
     if (this.kind === 'gym') { const s = App.gym; s.a++; if (ok) { s.c++; s.streak++; } else s.streak = 0; streak = s.streak; }
     else {
@@ -531,7 +561,7 @@ const Quiz = {
     Save.save();
     const res = $('#q-result');
     const head = ok ? (retry ? '✅ GOT IT on the second try!' : fast ? '⚡ GENIUS! Lightning fast!' : choice(['✅ CORRECT!', '✅ NAILED IT!', '✅ BRILLIANT!', '✅ YES!'])) : i === -1 ? `⏰ TIME'S UP! The answer is (${'ABCDE'[q.correct]}) ${q.answer}` : i === -2 ? `⏭️ SKIPPED. The answer is (${'ABCDE'[q.correct]}) ${q.answer}` : `❌ NOT QUITE. The answer is (${'ABCDE'[q.correct]}) ${q.answer}`;
-    res.innerHTML = `<span class="big">${head}${first && streak >= 2 ? ` 🔥 ${streak} in a row` : ''}</span>${q.why}`;
+    res.innerHTML = `<span class="big">${head}${first && streak >= 2 ? ` 🔥 ${streak} in a row` : ''}</span>${q.why}${!ok && q.key ? `<div class="qkey">💡 ${esc(q.key)}</div>` : ''}`;
     res.className = 'qresult on ' + (ok ? 'good' : 'bad');
     Sound.play(ok ? 'correct' : 'wrong');
     if (ok) confetti(fast ? 46 : 28);

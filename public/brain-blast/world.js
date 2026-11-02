@@ -14,6 +14,18 @@ const THEMES = {
     border: '#3e8f45', border2: '#2f7738', deco: 'tree',
     wallTop: '#b9c1d3', wallSide: '#7c849b', blockTop: '#d69a5c', blockSide: '#94602f',
     bush: '#2fb54d', bushDark: '#155c2a', bushLight: '#7ce681', water: '#3cb8ff', waterDark: '#1f7fd1' },
+  ice: { floorA: '#e8f5ff', floorB: '#dbeefb', speck: 'rgba(90,150,210,0.18)', edge: '#8fbfe6',
+    border: '#a9d4f5', border2: '#97c6ec', deco: 'rock', prop: '#cfe0f2',
+    wallTop: '#d4e6f8', wallSide: '#8fb0d6', blockTop: '#9fd8f0', blockSide: '#5c9cc4',
+    bush: '#5fd1c0', bushDark: '#22807c', bushLight: '#c4fff4', water: '#5ab8ff', waterDark: '#2a7fd1' },
+  lava: { floorA: '#4d3c3c', floorB: '#463636', speck: 'rgba(255,120,60,0.16)', edge: '#2a1d1d',
+    border: '#2b1a1a', border2: '#382020', deco: 'rock', prop: '#5c454e',
+    wallTop: '#67546a', wallSide: '#3d2e3d', blockTop: '#ff8a3c', blockSide: '#b84a1c',
+    bush: '#8a4fc8', bushDark: '#3a1a5a', bushLight: '#c79af2', water: '#ff6a1c', waterDark: '#b8380c' },
+  night: { floorA: '#3d4475', floorB: '#373e6c', speck: 'rgba(180,200,255,0.13)', edge: '#262b50',
+    border: '#1f2446', border2: '#272d58', deco: 'tree',
+    wallTop: '#858cc0', wallSide: '#525890', blockTop: '#c28bff', blockSide: '#7b4dff',
+    bush: '#3fae72', bushDark: '#163f30', bushLight: '#86ecb4', water: '#3c7fff', waterDark: '#1f4fd1' },
 };
 
 // Maps are drawn as one corner and mirrored, so both sides are fair.
@@ -174,6 +186,8 @@ class Game {
     f.aim = f.face = Math.atan2(this.player.y - f.y, this.player.x - f.x);
     const sk = spec.skill != null ? spec.skill : this.stage && this.stage.skill != null ? this.stage.skill : 0.45;
     f.bot = H.boss ? new BossAI(this, f, spec) : H.structure ? new FactoryAI(this, f, spec) : new Bot(this, f, sk, 'solo');
+    f.spec = spec; if (spec.color) f.color = spec.color; if (spec.msgs) f.msgs = spec.msgs;
+    if (spec.shield) { f.shield = true; f.shieldT = 0; f.vuln = 0; }
     f.invuln = quiet ? 0 : 1;
     if (!quiet) this.puff(f.x, f.y, 8, 'rgba(255,120,120,0.85)');
     this.fighters.push(f);
@@ -218,7 +232,7 @@ class Game {
   tip(id) { if (this.ui.tip) this.ui.tip(id); }
   breakShield(b, how = 'ok') {
     b = b || this.shieldTarget(); if (!b || !b.alive) return;
-    const spec = b.bot && b.bot.spec, base = (spec && spec.shieldTime) || 10;
+    const spec = b.spec || (b.bot && b.bot.spec), base = (spec && spec.shieldTime) || 10;
     const win = Math.round(base * (how === 'retry' ? 0.7 : 1) + (how === 'fast' ? 3 : 0));
     b.shield = false; b.vuln = win; b.shieldT = spec && spec.regrow === false ? 0 : win + 6; b.stun = b.def.boss ? 1.6 : 0.8;
     this.cam.shake = 10; Sound.play('boom', 0.7);
@@ -951,6 +965,7 @@ class Bot {
   intent(dt) {
     const g = this.g, f = this.f, it = { mx: 0, my: 0, aim: null, fire: false, sup: false, tx: null, ty: null, aiming: false };
     if (g.phase !== 'play') return it;
+    if (f.stun > 0) { f.stun -= dt; return it; }
     this.thinkT -= dt; this.react -= dt; this.fireCD -= dt; this.strafeT -= dt;
     if (this.thinkT <= 0) { this.thinkT = 0.25 + Math.random() * 0.15; this.decide(); }
     if (this.strafeT <= 0) { this.strafeT = rand(0.6, 1.5); this.strafe = -this.strafe; }
@@ -1080,7 +1095,8 @@ class FactoryAI {
     if (this.t <= 0) {
       this.t = this.spec.every || 7;
       const P = g.player;
-      if (P.alive && dist(f.x, f.y, P.x, P.y) < 13 * T && this.kids.length < (this.spec.max || 2)) {
+      const out = g.fighters.reduce((n, e) => n + (e.alive && e.team === f.team && !e.structure ? 1 : 0), 0);
+      if (P.alive && dist(f.x, f.y, P.x, P.y) < 10 * T && this.kids.length < (this.spec.max || 2) && out < (this.spec.cap || 4)) {
         this.kids.push(g.spawnEnemy({ hero: choice(this.spec.spawn || ['robo']), hp: this.spec.kidHp || 0.8, dmg: this.spec.kidDmg || 0.8 }, { x: f.x, y: f.y + f.r + 34 }));
         f.recoil = 1; Sound.play('lob', 0.8);
       }
@@ -1215,9 +1231,9 @@ Game.prototype.drawProp = function (ctx, x, y, h) {
     circ(ctx, x - 6, y - 38, 8); ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fill();
   } else {
     ell(ctx, x + 6, y + 14, 26, 9); ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fill();
-    if (h < 0.18) { // cactus
+    if (h < 0.18 && !th.prop) { // cactus
       rrect(ctx, x - 8, y - 40, 16, 54, 8); fs(ctx, '#4fb05a', 3); rrect(ctx, x - 24, y - 24, 12, 22, 6); fs(ctx, '#4fb05a', 3); rrect(ctx, x + 12, y - 30, 12, 18, 6); fs(ctx, '#4fb05a', 3);
-    } else { rrect(ctx, x - 22, y - 18, 44, 32, 14); fs(ctx, '#b98a5a', 3); rrect(ctx, x - 14, y - 14, 18, 8, 4); fs(ctx, 'rgba(255,255,255,0.25)', 0); }
+    } else { rrect(ctx, x - 22, y - 18, 44, 32, 14); fs(ctx, th.prop || '#b98a5a', 3); rrect(ctx, x - 14, y - 14, 18, 8, 4); fs(ctx, 'rgba(255,255,255,0.25)', 0); }
   }
 };
 Game.prototype.drawMine = function (ctx, t) {
@@ -1270,7 +1286,7 @@ Game.prototype.drawFighter = function (ctx, f, dpr) {
   const k = f.def.scale || 1, zoom = this.cam.s * dpr, SW = 150 * k, SH = 170 * k, FX = 75 * k, FY = 135 * k;
   if (f.spriteZoom !== zoom) { f.sprite.width = Math.ceil(SW * zoom); f.sprite.height = Math.ceil(SH * zoom); f.spriteZoom = zoom; }
   const sc = f.sprite.getContext('2d'); sc.setTransform(1, 0, 0, 1, 0, 0); sc.clearRect(0, 0, f.sprite.width, f.sprite.height); sc.setTransform(zoom, 0, 0, zoom, 0, 0);
-  drawHero(sc, f.hero, { x: FX, y: FY, s: 1.14 * k, t: this.time, aim: f.face, moving: f.moving, walk: f.walk, recoil: f.recoil, seed: f.seed, noShadow: true, squash: f.squash });
+  drawHero(sc, f.hero, { x: FX, y: FY, s: 1.14 * k, t: this.time, aim: f.face, moving: f.moving, walk: f.walk, recoil: f.recoil, seed: f.seed, noShadow: true, squash: f.squash, color: f.color, msgs: f.msgs });
   if (f.flash > 0) { sc.globalCompositeOperation = 'source-atop'; sc.fillStyle = 'rgba(255,255,255,0.8)'; sc.fillRect(0, 0, SW, SH); sc.globalCompositeOperation = 'source-over'; }
   ell(ctx, f.x, f.y, 25 * k * (f.leap ? 0.7 : 1), 9 * k * (f.leap ? 0.7 : 1)); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
   let a = f.inBush ? 0.55 : 1; if (f.invuln > 0 && !f.dash && !f.leap) a *= 0.6 + 0.4 * Math.sin(this.time * 30);

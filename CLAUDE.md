@@ -42,7 +42,10 @@ Do not touch other sites' folders unless asked.
   `/api/ascii-art/` and tables `aa_libraries`, `aa_devices`, `aa_items`. Tables are created by
   the Worker itself (`CREATE TABLE IF NOT EXISTS`), so there is no migration step.
   Brain Blast Arena uses `/api/brain-blast/` and tables `bb_players`, `bb_devices`, `bb_stages`
-  (code in `worker/brain-blast.js`; its stages are data in `public/brain-blast/stages.js`).
+  (code in `worker/brain-blast.js`; its stages are built in `public/brain-blast/stages.js` from the
+  math content in `public/brain-blast/content.js`, which `tools/brain-blast/import-content.mjs` makes
+  from the content Markdown file; run `tools/brain-blast/check-content.mjs` on that file before publishing).
+  The game must not name any math contest anywhere.
 - Pages call the API with relative URLs, e.g. `new URL('../api/ascii-art/', location.href)`.
 - API responses must send `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store`
   (`_headers` only covers static files).

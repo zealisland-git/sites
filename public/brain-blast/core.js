@@ -15,8 +15,8 @@ const FONT = '"Lilita One", "Arial Black", Impact, sans-serif';
 // ---------- save data (per browser) ----------
 const Save = {
   key: 'brain-blast-arena-v1',
-  d: { trophies: 0, hero: 'blaze', level: 2, mode: 'adventure', sfx: true, music: true, asked: 0, correct: 0, wins: 0, games: 0, bestStreak: 0, seenHow: false, lv: {}, seenUnlock: {}, stages: {}, updated: 0, tips: {}, mrating: 0 },
-  load() { try { const s = JSON.parse(localStorage.getItem(this.key) || 'null'); if (s && typeof s === 'object') Object.assign(this.d, s); } catch (e) { /* private mode */ } if (!this.d.stages || typeof this.d.stages !== 'object') this.d.stages = {}; if (!this.d.tips || typeof this.d.tips !== 'object') this.d.tips = {}; },
+  d: { trophies: 0, hero: 'blaze', level: 2, mode: 'adventure', sfx: true, music: true, asked: 0, correct: 0, wins: 0, games: 0, bestStreak: 0, seenHow: false, lv: {}, seenUnlock: {}, stages: {}, updated: 0, tips: {}, mrating: 0, subStats: {}, gymSub: 'all' },
+  load() { try { const s = JSON.parse(localStorage.getItem(this.key) || 'null'); if (s && typeof s === 'object') Object.assign(this.d, s); } catch (e) { /* private mode */ } if (!this.d.stages || typeof this.d.stages !== 'object') this.d.stages = {}; if (!this.d.tips || typeof this.d.tips !== 'object') this.d.tips = {}; if (!this.d.subStats || typeof this.d.subStats !== 'object') this.d.subStats = {}; },
   // touch = false when copying data in from the cloud (so it does not count as a new change)
   save(touch = true) { if (touch) this.d.updated = Date.now(); try { localStorage.setItem(this.key, JSON.stringify(this.d)); } catch (e) { /* ignore */ } },
 };
@@ -155,6 +155,10 @@ Object.assign(HEROES, {
     atk: { type: 'laser', dmg: 520, count: 1, range: 9, speed: 1350, reload: 2.4, r: 8, pierce: true, color: '#9ffcff' }, sup: NO_SUPER, bars: { hp: 1, dmg: 2, range: 4, speed: 3 } },
   brute: { id: 'brute', name: 'BRUTE', title: 'Tank Robot', role: 'Minion', color: '#ff9f1c', hp: 3600, speed: 160, scale: 1.25, unlock: 1e9, superCharge: 1e12, minion: true, draw: 'brute',
     atk: { type: 'shotgun', dmg: 240, count: 4, spread: 0.5, range: 3.8, speed: 900, reload: 1.8, r: 8, color: '#ffc46b' }, sup: NO_SUPER, bars: { hp: 3, dmg: 2, range: 1, speed: 2 } },
+  guard: { id: 'guard', name: 'SHIELD GUARD', title: 'Shielded Robot', role: 'Minion', color: '#5a7bd8', hp: 3800, speed: 165, scale: 1.45, unlock: 1e9, superCharge: 1e12, minion: true, draw: 'brute',
+    atk: { type: 'shotgun', dmg: 230, count: 4, spread: 0.5, range: 4, speed: 900, reload: 1.9, r: 8, color: '#9ec4ff' }, sup: NO_SUPER, bars: { hp: 4, dmg: 2, range: 1, speed: 2 } },
+  guardian: { id: 'guardian', name: 'GUARDIAN', title: 'Mini Boss', role: 'Boss', color: '#2fb6a4', hp: 8000, speed: 125, scale: 1.65, unlock: 1e9, superCharge: 1e12, boss: true, draw: 'boss', variant: 'calc',
+    atk: { type: 'burst', dmg: 260, count: 1, range: 9, speed: 650, reload: 1, r: 11, color: '#7dffe0' }, sup: NO_SUPER, bars: { hp: 4, dmg: 3, range: 4, speed: 2 } },
   factory: { id: 'factory', name: 'ROBOT FACTORY', title: 'Robot Factory', role: 'Structure', color: '#ff7b3a', hp: 5000, speed: 0, scale: 1.5, unlock: 1e9, superCharge: 1e12, minion: true, structure: true, draw: 'factory',
     atk: { type: 'burst', dmg: 0, count: 1, range: 1, speed: 500, reload: 99, r: 8, color: '#ff7b3a' }, sup: NO_SUPER, bars: { hp: 4, dmg: 0, range: 0, speed: 0 } },
   calcutron: { id: 'calcutron', name: 'CALCUTRON', title: 'Calculator Robot Boss', role: 'Boss', color: '#7f93c4', hp: 20000, speed: 110, scale: 2.1, unlock: 1e9, superCharge: 1e12, boss: true, draw: 'boss', variant: 'calc',
@@ -421,7 +425,7 @@ HERO_DRAW.boss = function (ctx, a) {
   circ(ctx, -30, -38, 9); fs(ctx, '#4a4f66');
   rrect(ctx, -27, -62, 54, 50, 12); fs(ctx, col);
   rrect(ctx, -20, -57, 40, 17, 5); fs(ctx, frac ? '#2a1748' : '#173a26', 2.5);
-  const msgs = frac ? ['1/2', '3/4', '5/8', '2/3', '7/9'] : ['3.1415', '7×8=56', '√144', '2+2=4', '9²=81'];
+  const msgs = a.msgs || (frac ? ['1/2', '3/4', '5/8', '2/3', '7/9'] : ['3.1415', '7×8=56', '√144', '2+2=4', '9²=81']);
   txt(ctx, msgs[Math.floor(t / 1.3) % msgs.length], 0, -48.5, frac ? 12 : 9, frac ? '#ff9be6' : '#7dff9a', 'center', 0);
   if (frac) { circ(ctx, 0, -33, 2.6); fs(ctx, '#fff', 1.5); rrect(ctx, -9, -28.5, 18, 3.5, 1.5); fs(ctx, '#fff', 1.5); circ(ctx, 0, -21.5, 2.6); fs(ctx, '#fff', 1.5); }
   else { const cs = ['#ff6b6b', '#ffd23f', '#7dff6a', '#5ec8ff', '#ff8be6', '#fff']; for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { rrect(ctx, -17 + i * 12, -35 + j * 9, 10, 6, 2); fs(ctx, cs[i + j * 3], 1.5); } }
@@ -447,7 +451,7 @@ function drawHero(ctx, id, o) {
   if (o.squash) ctx.scale(1 + o.squash * 0.12, 1 - o.squash * 0.12);
   ctx.scale(face, 1);
   const H = HEROES[id];
-  HERO_DRAW[H.draw || id](ctx, { t, la, bob, step: moving ? Math.sin(ph) : 0, back: Math.sin(aim) < -0.45, recoil: o.recoil || 0, blink, color: o.color || H.color, variant: H.variant });
+  HERO_DRAW[H.draw || id](ctx, { t, la, bob, step: moving ? Math.sin(ph) : 0, back: Math.sin(aim) < -0.45, recoil: o.recoil || 0, blink, color: o.color || H.color, variant: H.variant, msgs: o.msgs });
   ctx.restore();
 }
 

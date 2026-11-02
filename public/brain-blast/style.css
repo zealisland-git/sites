@@ -381,6 +381,10 @@ body:not(.touch) .mob { display: none; }
 .cl-msg:empty { display: none; }
 .qhead.shield { background: linear-gradient(#9ffcff, #1f9fd1); }
 .qresult.retry { background: #fff4d6; border: 3px solid #ffb700; }
+.qkey { margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,0.65); border: 2px dashed #a46bff; font-weight: 800; }
+#gym-topic { border: 3px solid var(--out); border-radius: 999px; padding: 4px 10px; font-family: var(--body); font-weight: 900; font-size: 14px; background: #fff; color: var(--out); max-width: 100%; box-shadow: 0 3px 0 var(--out); }
+.si-key { margin: 0; font-weight: 800; line-height: 1.4; background: rgba(15,12,40,0.45); border-radius: 12px; padding: 8px 12px; }
+.si-key b { color: #ffd23f; }
 .qresult.retry .big { color: #b86f00; }
 .qc.out { text-decoration: line-through; opacity: 0.55; }
 .confetti { position: absolute; top: 45%; width: 9px; height: 15px; border-radius: 2px; pointer-events: none; z-index: 3; animation: conf 1.2s cubic-bezier(.15,.7,.3,1) forwards; }

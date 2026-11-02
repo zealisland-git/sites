@@ -7,7 +7,7 @@
    Stage records keep the best result; the rest of the profile uses the newest copy. */
 'use strict';
 
-const PROFILE_KEYS = ['trophies', 'hero', 'level', 'mode', 'asked', 'correct', 'wins', 'games', 'bestStreak', 'lv', 'seenHow'];
+const PROFILE_KEYS = ['trophies', 'hero', 'level', 'mode', 'asked', 'correct', 'wins', 'games', 'bestStreak', 'lv', 'seenHow', 'subStats', 'mrating'];
 
 const Cloud = {
   API: new URL('../api/brain-blast/', location.href).toString(),
@@ -68,6 +68,8 @@ const Cloud = {
       for (const k of ['asked', 'correct', 'wins', 'games', 'bestStreak']) if (P[k] != null) d[k] = num(P[k], 0, 1e9);
       if (P.lv && typeof P.lv === 'object') { const lv = {}; for (const k of ['1', '2', '3', '4', '5']) { const x = P.lv[k]; if (x && typeof x === 'object') lv[k] = { a: num(x.a, 0, 1e9), c: num(x.c, 0, 1e9) }; } d.lv = lv; }
       if (typeof P.seenHow === 'boolean') d.seenHow = P.seenHow;
+      if (P.subStats && typeof P.subStats === 'object') { const ss = {}; for (const [k, x] of Object.entries(P.subStats)) if (/^\d{1,2}\.\d{1,2}$/.test(k) && x && typeof x === 'object') ss[k] = { a: num(x.a, 0, 1e9), c: num(x.c, 0, 1e9) }; d.subStats = ss; }
+      if (P.mrating != null) d.mrating = Math.min(5, Math.max(0, Number(P.mrating) || 0));
       d.updated = s.updated || d.updated; changed = true;
     }
     if (changed) Save.save(false);
