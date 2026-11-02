@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1a3bb3">
+  <title>Brain Blast Arena</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="ui">
+    <!-- TITLE -->
+    <section id="title" class="screen on">
+      <div class="logo">
+        <div class="logo-top ol">BRAIN BLAST</div>
+        <div class="logo-bot ol">ARENA</div>
+        <div class="logo-tag">Battle with your brain · AMC 8 math power</div>
+      </div>
+      <button class="btn yellow big pulse" id="btn-start"><span>TAP TO PLAY</span></button>
+    </section>
+
+    <!-- LOBBY -->
+    <section id="lobby" class="screen">
+      <div class="topbar">
+        <div class="pills">
+          <div class="pill trophy"><span class="ico">🏆</span><b id="lb-trophies">0</b></div>
+          <div class="pill brain" title="Your math accuracy"><span class="ico">🧠</span><b id="lb-acc">–</b></div>
+        </div>
+        <div class="road">
+          <div class="road-label ol" id="road-label">Next hero at 30 🏆</div>
+          <div class="road-bar"><div id="road-fill"></div></div>
+        </div>
+        <div class="icons">
+          <button class="ibtn" id="btn-how" title="How to play">?</button>
+          <button class="ibtn" id="btn-sfx" title="Sound effects">🔊</button>
+          <button class="ibtn" id="btn-music" title="Music">🎵</button>
+        </div>
+      </div>
+      <div class="side">
+        <button class="btn blue tall" id="btn-heroes"><canvas class="mini" id="mini-hero"></canvas><span>HEROES</span></button>
+        <button class="btn purple tall" id="btn-gym"><span class="emo">🏋️</span><span>BRAIN GYM</span></button>
+      </div>
+      <div class="nameplate">
+        <div class="np-name ol" id="lb-name">BLAZE</div>
+        <div class="np-title" id="lb-title">Speedy Fox · Blaster</div>
+      </div>
+      <div class="bottom">
+        <button class="btn level" id="btn-level"><span class="lv-stars" id="lb-stars">★★</span><span class="lv-text"><b id="lb-lvname">ROOKIE</b><small id="lb-lvamc">AMC 8 #6–10</small></span><span class="lv-chg">MATH LEVEL ▸</span></button>
+        <button class="btn modebtn" id="btn-mode"><span class="emo" id="lb-modeico">💎</span><span class="lv-text"><b id="lb-mode">NUMBER GRAB</b><small id="lb-modesub">3 vs 3</small></span></button>
+        <button class="btn yellow play" id="btn-play"><span>PLAY</span></button>
+      </div>
+    </section>
+
+    <!-- HEROES -->
+    <section id="heroes" class="screen">
+      <div class="hdr"><button class="btn red back" data-back="lobby"><span>◀</span></button><h2 class="ol">HEROES</h2></div>
+      <div class="hero-wrap">
+        <div class="hero-grid" id="hero-grid"></div>
+        <div class="hero-detail panel" id="hero-detail">
+          <canvas id="hd-canvas"></canvas>
+          <div class="hd-info">
+            <div class="hd-name ol" id="hd-name"></div>
+            <div class="hd-role" id="hd-role"></div>
+            <div class="hd-bars" id="hd-bars"></div>
+            <p class="hd-blurb" id="hd-blurb"></p>
+            <button class="btn yellow" id="hd-select"><span>SELECT</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VS -->
+    <section id="vs" class="screen">
+      <div class="vs-mode ol" id="vs-mode">NUMBER GRAB</div>
+      <div class="vs-row">
+        <div class="vs-team blue" id="vs-a"></div>
+        <div class="vs-x ol">VS</div>
+        <div class="vs-team red" id="vs-b"></div>
+      </div>
+      <div class="vs-sub" id="vs-sub"></div>
+    </section>
+
+    <!-- HUD -->
+    <section id="hud" class="screen">
+      <button class="ibtn pause" id="btn-pause" title="Pause">❚❚</button>
+      <div id="hud-grab" class="hud-top">
+        <div class="score">
+          <div class="sc blue"><span class="gem"></span><b id="sc-a">0</b></div>
+          <div class="sc mid"><b id="sc-clock">2:30</b><small id="sc-cd"></small></div>
+          <div class="sc red"><b id="sc-b">0</b><span class="gem"></span></div>
+        </div>
+        <div class="rule" id="rule">
+          <div class="rule-lbl">GRAB ONLY</div>
+          <div class="rule-txt ol" id="rule-txt">EVEN NUMBERS</div>
+          <div class="rule-hint" id="rule-hint"></div>
+          <div class="rule-bar"><div id="rule-fill"></div></div>
+        </div>
+      </div>
+      <div id="hud-roy" class="hud-top">
+        <div class="score"><div class="sc mid wide"><b id="roy-left">6</b><small>PLAYERS LEFT</small></div></div>
+        <div class="rule small" id="roy-note"><div class="rule-hint" id="roy-hint">Break <b>?</b> crates → grab the cube → solve for POWER</div></div>
+      </div>
+      <div id="feed"></div>
+      <div id="banner"><div class="b-main ol" id="b-main"></div><div class="b-sub" id="b-sub"></div></div>
+      <div id="abil">
+        <div class="ab super" id="ab-super"><div class="ab-ring" id="ab-ring"></div><span>SUPER</span><small>SPACE / R-CLICK</small></div>
+        <button class="ab brainb" id="ab-brain"><span class="emo">🧠</span><span id="ab-brain-txt">BRAIN CHARGE</span><small id="ab-brain-sub">Q KEY</small></button>
+      </div>
+      <div id="keys-hint">WASD move · mouse aim · click shoot · SPACE super · Q brain charge</div>
+      <div id="dead" class="panel">
+        <div class="dead-t ol">KNOCKED OUT!</div>
+        <div class="dead-s" id="dead-s">Respawning in 5…</div>
+        <button class="btn green" id="btn-revive"><span>🧠 SOLVE TO RESPAWN NOW</span></button>
+      </div>
+      <div id="rotate-hint">Turn your phone sideways for the best view ↻</div>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="results" class="screen">
+      <div class="res-title ol" id="res-title">VICTORY!</div>
+      <div class="res-sub" id="res-sub"></div>
+      <div class="res-body panel">
+        <canvas id="res-hero"></canvas>
+        <div class="res-stats" id="res-stats"></div>
+      </div>
+      <div class="res-trophy ol" id="res-trophy">+10 🏆</div>
+      <div class="res-unlock" id="res-unlock"></div>
+      <div class="res-btns">
+        <button class="btn blue" id="btn-lobby"><span>LOBBY</span></button>
+        <button class="btn yellow" id="btn-again"><span>PLAY AGAIN</span></button>
+      </div>
+    </section>
+
+    <!-- MODALS -->
+    <div id="m-mode" class="modal"><div class="mbox panel">
+      <h3 class="ol">CHOOSE A MODE</h3>
+      <div class="cards">
+        <button class="mcard grab" data-mode="grab"><div class="mc-ico">💎</div><b class="ol">NUMBER GRAB</b><small>3 vs 3</small><p>A math RULE shows at the top. Grab gems whose number fits it. Wrong gems are traps! Hold 10 gems for 15 seconds to win.</p></button>
+        <button class="mcard roy" data-mode="royale"><div class="mc-ico">☠️</div><b class="ol">BRAIN ROYALE</b><small>Solo · 6 players</small><p>Smash <b>?</b> crates, solve the Brain Cube problems for POWER, and be the last one standing as the poison closes in.</p></button>
+      </div>
+      <button class="btn red" data-close><span>CLOSE</span></button>
+    </div></div>
+
+    <div id="m-level" class="modal"><div class="mbox panel">
+      <h3 class="ol">MATH LEVEL</h3>
+      <p class="msub">Harder problems = more trophies when you win!</p>
+      <div class="levels" id="levels"></div>
+      <button class="btn red" data-close><span>CLOSE</span></button>
+    </div></div>
+
+    <div id="m-how" class="modal"><div class="mbox panel how">
+      <h3 class="ol">HOW TO PLAY</h3>
+      <div class="how-grid">
+        <div class="how-c"><div class="how-i">🎮</div><b>Controls</b><p><span class="desk">WASD to move, aim with the mouse, click to shoot. <b>SPACE</b> or right-click for your SUPER.</span><span class="mob">Left thumb moves. Right thumb: drag to aim, let go to shoot (tap = auto-aim). Yellow button = SUPER.</span></p></div>
+        <div class="how-c"><div class="how-i">💎</div><b>Number Grab</b><p>The <b>RULE</b> at the top (like PRIMES) changes every 35 s. Only grab gems that fit it. Wrong gems zap you and cost a gem!</p></div>
+        <div class="how-c"><div class="how-i">❓</div><b>Brain Cubes</b><p>Break purple <b>?</b> crates. Grab the cube and solve an AMC 8 style problem for +10% health and damage.</p></div>
+        <div class="how-c"><div class="how-i">🧠</div><b>Brain Charge</b><p>Press <b>Q</b> (or the 🧠 button) any time: solve a problem to fully charge your SUPER.</p></div>
+        <div class="how-c"><div class="how-i">💫</div><b>Comebacks</b><p>Knocked out? Solve a problem to respawn instantly. In Royale you get one Second Chance.</p></div>
+        <div class="how-c"><div class="how-i">✏️</div><b>Scratch pad</b><p>Hard problem? Open the scratch pad and work it out. The game is paused while you think.</p></div>
+      </div>
+      <button class="btn yellow" data-close id="how-ok"><span>LET'S GO!</span></button>
+    </div></div>
+
+    <div id="m-pause" class="modal"><div class="mbox panel small">
+      <h3 class="ol">PAUSED</h3>
+      <button class="btn yellow" id="btn-resume"><span>RESUME</span></button>
+      <button class="btn blue" id="btn-howp"><span>HOW TO PLAY</span></button>
+      <button class="btn red" id="btn-quit"><span>QUIT MATCH</span></button>
+    </div></div>
+
+    <!-- QUIZ -->
+    <div id="quiz" class="modal quiz">
+      <div class="qcard">
+        <div class="qhead">
+          <span class="qbadge ol" id="q-badge">🧊 BRAIN CUBE</span>
+          <span class="qlevel" id="q-level">AMC 8 · LV 2</span>
+        </div>
+        <div class="qgym" id="q-gym"></div>
+        <div class="qreward" id="q-reward">Solve it: +1 POWER</div>
+        <div class="qbar"><div id="q-fill"></div><span id="q-time">45</span></div>
+        <div class="qtopic" id="q-topic"></div>
+        <div class="qtext" id="q-text"></div>
+        <div class="qchoices" id="q-choices"></div>
+        <div class="qresult" id="q-result"></div>
+        <div class="qtools">
+          <button class="tbtn" id="q-scratch">✏️ Scratch pad</button>
+          <button class="tbtn" id="q-clear">🧽 Clear</button>
+          <span class="grow"></span>
+          <button class="tbtn" id="q-skip">Skip</button>
+          <button class="btn green" id="q-next"><span>CONTINUE ▶</span></button>
+        </div>
+        <canvas id="q-pad"></canvas>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+  </div>
+
+  <script src="math.js"></script>
+  <script src="core.js"></script>
+  <script src="world.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
