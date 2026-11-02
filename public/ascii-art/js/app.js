@@ -136,8 +136,7 @@ window.addEventListener('paste', e => {
 // ---- once the art font has loaded, re-measure glyphs for the best match
 if (document.fonts && document.fonts.load) {
   Promise.all([
-    document.fonts.load('16px "JetBrains Mono"'),
-    document.fonts.load('16px "JetBrains Mono"', '░▒▓█▀▄▌▐─│┌┐└┘╔╗╚╝═║'),
+    document.fonts.load('16px "AAS Mono"', 'Aa0 ░▒▓█▀▄▌▐─│┌┐└┘╔╗╚╝═║'),
   ]).then(() => {
     resetMetrics();
     text.refresh(); picture.refresh(); doodle.refresh();

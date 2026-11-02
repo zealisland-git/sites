@@ -1,5 +1,5 @@
 // Showing, exporting and sharing ASCII art.
-import { ART_FONT, LH, charWidthFor, fontMetrics } from './engine.js';
+import { ART_FONT, LH, charWidthFor, fontMetrics, isOffGrid, isAllBraille } from './engine.js';
 
 export const THEMES = {
   paper: { name: 'Paper', bg: '#fffdf7', ink: '#2d2640', dark: false },
@@ -66,13 +66,36 @@ export function artSize(text) {
   return { cols, rows: lines.length, lines };
 }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>]/g, c => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+// HTML-escape art text. With `cells`, a character that the art font cannot draw at exactly
+// one cell wide (it came from a fallback font) is put into a one-cell slot, so columns
+// such as the right edge of a box always line up.
+function cellText(s, cells) {
+  let out = '';
+  for (const ch of s) {
+    if (ch === '&') out += '&amp;';
+    else if (ch === '<') out += '&lt;';
+    else if (ch === '>') out += '&gt;';
+    else if (cells && isOffGrid(ch)) out += '<span class="cell">' + ch + '</span>';
+    else out += ch;
+  }
+  return out;
+}
+function needsCells(text) {
+  if (!/[^\x00-\x7f]/.test(text) || isAllBraille(text)) return false;
+  for (const ch of new Set(text)) if (isOffGrid(ch)) return true;
+  return false;
+}
+/** Put plain art text into a <pre>, keeping every character on the grid. */
+export function setArtText(pre, text) {
+  if (needsCells(text)) pre.innerHTML = cellText(text, true);
+  else pre.textContent = text;
 }
 
 function coloredHtml(art, theme) {
   const { lines } = artSize(art.text);
   const cols = art.cols;
+  const cells = needsCells(art.text);
+  const esc = s => cellText(s, cells);
   let html = '';
   const cache = new Map();
   for (let y = 0; y < lines.length; y++) {
@@ -83,14 +106,14 @@ function coloredHtml(art, theme) {
       if (ch === ' ' || ch === '⠀') { buf += ch; continue; }
       const hex = art.colors.substr((y * cols + x) * 3, 3);
       if (hex !== cur) {
-        if (buf) html += cur ? `<span style="color:${cache.get(cur)}">${escapeHtml(buf)}</span>` : escapeHtml(buf);
+        if (buf) html += cur ? `<span style="color:${cache.get(cur)}">${esc(buf)}</span>` : esc(buf);
         buf = '';
         cur = hex;
         if (!cache.has(hex)) cache.set(hex, readable(hex, theme.dark));
       }
       buf += ch;
     }
-    if (buf) html += cur ? `<span style="color:${cache.get(cur)}">${escapeHtml(buf)}</span>` : escapeHtml(buf);
+    if (buf) html += cur ? `<span style="color:${cache.get(cur)}">${esc(buf)}</span>` : esc(buf);
     if (y < lines.length - 1) html += '\n';
   }
   return html;
@@ -104,7 +127,7 @@ export function paintPre(pre, art, theme = getTheme()) {
   if (art.color === 'original' && art.colors) {
     pre.innerHTML = coloredHtml(art, theme);
   } else {
-    pre.textContent = art.text;
+    setArtText(pre, art.text);
     const stops = gradientStops(art.color, theme);
     if (stops) {
       pre.classList.add('grad');

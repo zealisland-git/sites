@@ -2,7 +2,7 @@
 import { FONTS, FONT_CATEGORIES } from './fonts.js';
 import { parseFont, renderText } from './figlet.js';
 import { createOutput, chipGroup, slider, $, $$, el } from './ui.js';
-import { fitFontSize, COLOR_MODES, swatchCss } from './output.js';
+import { fitFontSize, setArtText, COLOR_MODES, swatchCss } from './output.js';
 import { decorate, initDecorations, findCustom, mergeCustomDecos } from './decorations.js';
 
 const fontCache = new Map();
@@ -105,7 +105,7 @@ export function initTextTab() {
       const font = await loadFont(f.f);
       const rows = renderText(font, previewText(), { layout: state.layout });
       const text = rows.join('\n') || ' ';
-      pre.textContent = text;
+      setArtText(pre, text);
       const box = $('.fprev-box', card);
       pre.style.fontSize = fitFontSize(text, box.clientWidth - 8, box.clientHeight - 8, 11) + 'px';
       card.classList.remove('loading');

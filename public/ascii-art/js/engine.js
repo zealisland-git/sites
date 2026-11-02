@@ -3,7 +3,7 @@
 // (how much each spot should be drawn), then picks characters.
 // The characters are measured from the real font so the tones are accurate.
 
-export const ART_FONT = '"JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace';
+export const ART_FONT = '"AAS Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace';
 export const LH = 1.1; // line-height used everywhere art is shown or exported
 
 export const STYLES = [
@@ -43,12 +43,32 @@ export function fontMetrics(sample = 'M') {
   return res;
 }
 
+// Art made only of braille dots keeps its own (consistent) width; anything else uses the
+// normal cell width, because off-grid characters are put into one-cell slots.
+export function isAllBraille(text) {
+  return /[⠀-⣿]/.test(text) && !/[^\s⠀-⣿]/.test(text);
+}
 export function charWidthFor(text) {
-  return fontMetrics(/[⠀-⣿]/.test(text) ? '⣿' : 'M').cw;
+  return fontMetrics(isAllBraille(text) ? '⣿' : 'M').cw;
+}
+
+// True if this character is drawn narrower or wider than one cell (it came from a
+// fallback font). Such characters are wrapped in a one-cell slot when shown.
+const offGridCache = new Map();
+export function isOffGrid(ch) {
+  if (ch.charCodeAt(0) < 128) return false;
+  let v = offGridCache.get(ch);
+  if (v === undefined) {
+    mctx.font = `100px ${ART_FONT}`;
+    v = Math.abs(mctx.measureText(ch).width - fontMetrics('M').cw * 100) > 0.5;
+    offGridCache.set(ch, v);
+  }
+  return v;
 }
 
 export function resetMetrics() {
   metricsCache.clear();
+  offGridCache.clear();
   glyphCache.clear();
   sampleCache.clear();
 }
