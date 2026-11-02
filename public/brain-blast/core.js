@@ -15,8 +15,8 @@ const FONT = '"Lilita One", "Arial Black", Impact, sans-serif';
 // ---------- save data (per browser) ----------
 const Save = {
   key: 'brain-blast-arena-v1',
-  d: { trophies: 0, hero: 'blaze', level: 2, mode: 'grab', sfx: true, music: true, asked: 0, correct: 0, wins: 0, games: 0, bestStreak: 0, seenHow: false, lv: {}, seenUnlock: {}, stages: {}, updated: 0 },
-  load() { try { const s = JSON.parse(localStorage.getItem(this.key) || 'null'); if (s && typeof s === 'object') Object.assign(this.d, s); } catch (e) { /* private mode */ } if (!this.d.stages || typeof this.d.stages !== 'object') this.d.stages = {}; },
+  d: { trophies: 0, hero: 'blaze', level: 2, mode: 'adventure', sfx: true, music: true, asked: 0, correct: 0, wins: 0, games: 0, bestStreak: 0, seenHow: false, lv: {}, seenUnlock: {}, stages: {}, updated: 0, tips: {}, mrating: 0 },
+  load() { try { const s = JSON.parse(localStorage.getItem(this.key) || 'null'); if (s && typeof s === 'object') Object.assign(this.d, s); } catch (e) { /* private mode */ } if (!this.d.stages || typeof this.d.stages !== 'object') this.d.stages = {}; if (!this.d.tips || typeof this.d.tips !== 'object') this.d.tips = {}; },
   // touch = false when copying data in from the cloud (so it does not count as a new change)
   save(touch = true) { if (touch) this.d.updated = Date.now(); try { localStorage.setItem(this.key, JSON.stringify(this.d)); } catch (e) { /* ignore */ } },
 };
@@ -155,6 +155,8 @@ Object.assign(HEROES, {
     atk: { type: 'laser', dmg: 520, count: 1, range: 9, speed: 1350, reload: 2.4, r: 8, pierce: true, color: '#9ffcff' }, sup: NO_SUPER, bars: { hp: 1, dmg: 2, range: 4, speed: 3 } },
   brute: { id: 'brute', name: 'BRUTE', title: 'Tank Robot', role: 'Minion', color: '#ff9f1c', hp: 3600, speed: 160, scale: 1.25, unlock: 1e9, superCharge: 1e12, minion: true, draw: 'brute',
     atk: { type: 'shotgun', dmg: 240, count: 4, spread: 0.5, range: 3.8, speed: 900, reload: 1.8, r: 8, color: '#ffc46b' }, sup: NO_SUPER, bars: { hp: 3, dmg: 2, range: 1, speed: 2 } },
+  factory: { id: 'factory', name: 'ROBOT FACTORY', title: 'Robot Factory', role: 'Structure', color: '#ff7b3a', hp: 5000, speed: 0, scale: 1.5, unlock: 1e9, superCharge: 1e12, minion: true, structure: true, draw: 'factory',
+    atk: { type: 'burst', dmg: 0, count: 1, range: 1, speed: 500, reload: 99, r: 8, color: '#ff7b3a' }, sup: NO_SUPER, bars: { hp: 4, dmg: 0, range: 0, speed: 0 } },
   calcutron: { id: 'calcutron', name: 'CALCUTRON', title: 'Calculator Robot Boss', role: 'Boss', color: '#7f93c4', hp: 20000, speed: 110, scale: 2.1, unlock: 1e9, superCharge: 1e12, boss: true, draw: 'boss', variant: 'calc',
     atk: { type: 'burst', dmg: 300, count: 1, range: 9, speed: 650, reload: 1, r: 12, color: '#ffd23f' }, sup: NO_SUPER, bars: { hp: 5, dmg: 3, range: 4, speed: 1 } },
   fractionator: { id: 'fractionator', name: 'THE FRACTIONATOR', title: 'Fraction Robot Boss', role: 'Boss', color: '#9b5cff', hp: 28000, speed: 120, scale: 2.2, unlock: 1e9, superCharge: 1e12, boss: true, draw: 'boss', variant: 'frac',
@@ -385,6 +387,30 @@ HERO_DRAW.brute = function (ctx, a) {
   rrect(ctx, -10, -26, 20, 9, 3); fs(ctx, 'rgba(0,0,0,0.18)', 0);
   ctx.restore();
   if (!a.back) can();
+};
+HERO_DRAW.factory = function (ctx, a) {
+  const { t } = a, col = a.color, pump = a.recoil * 3;
+  rrect(ctx, -32, -12, 64, 13, 5); fs(ctx, '#3a3f55');
+  for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#ffd23f' : OUT; ctx.fillRect(-28 + i * 9.5, -9, 9.5, 5); }
+  // chimney + smoke
+  rrect(ctx, 9, -82, 13, 28, 3); fs(ctx, '#6b7190');
+  for (let i = 0; i < 3; i++) { const p = ((t * 0.6 + i / 3) % 1), r = 5 + p * 9; circ(ctx, 15 + p * 10, -86 - p * 34, r); ctx.fillStyle = `rgba(210,210,225,${0.55 * (1 - p)})`; ctx.fill(); }
+  // main block
+  rrect(ctx, -27, -60 - pump, 54, 50 + pump, 9); fs(ctx, col);
+  rrect(ctx, -27, -60 - pump, 54, 12, 6); fs(ctx, 'rgba(0,0,0,0.12)', 0);
+  // door with conveyor slats
+  rrect(ctx, -13, -36, 26, 26, 4); fs(ctx, OUT, 0);
+  for (let i = 0; i < 3; i++) { const yy = -33 + ((t * 30 + i * 8) % 24); ctx.fillStyle = '#4a4f66'; ctx.fillRect(-11, yy, 22, 3); }
+  // glowing core window
+  circ(ctx, -14, -46 - pump, 6.5); fs(ctx, '#ffe14d', 2.5);
+  circ(ctx, -14, -46 - pump, 10 + Math.sin(t * 6) * 1.5); ctx.fillStyle = 'rgba(255,225,77,0.25)'; ctx.fill();
+  // gear
+  ctx.save(); ctx.translate(14, -45 - pump); ctx.rotate(t * 2);
+  for (let i = 0; i < 6; i++) { ctx.rotate(TAU / 6); rrect(ctx, -2.5, -10, 5, 5, 1.5); fs(ctx, '#c8cdd9', 1.5); }
+  circ(ctx, 0, 0, 7); fs(ctx, '#c8cdd9', 2); circ(ctx, 0, 0, 2.5); fs(ctx, OUT, 0);
+  ctx.restore();
+  // warning light
+  circ(ctx, -20, -64 - pump, 4); fs(ctx, Math.sin(t * 7) > 0 ? '#ff4f6a' : '#7a2030', 2);
 };
 HERO_DRAW.boss = function (ctx, a) {
   const { t, la, bob, step } = a, col = a.color, frac = a.variant === 'frac';

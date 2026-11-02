@@ -64,7 +64,13 @@ function drawMenu(dt) {
 }
 
 // ---------- lobby ----------
-function nextUnlock() { return HERO_ORDER.map(id => HEROES[id]).filter(h => h.unlock > Save.d.trophies).sort((a, b) => a.unlock - b.unlock)[0]; }
+const rewardChapter = id => CHAPTERS.find(c => c.reward && c.reward.hero === id);
+function chapterDone(c) { const list = STAGES.filter(s => s.chapter === c.id); return list.length > 0 && stageRec(list[list.length - 1].id).stars > 0; }
+function heroUnlocked(id) { const h = HEROES[id], c = rewardChapter(id); return Save.d.trophies >= h.unlock || !!(c && chapterDone(c)); }
+const unlockedSet = () => new Set(HERO_ORDER.filter(heroUnlocked));
+function lockText(h) { const c = rewardChapter(h.id); return c ? `${h.unlock} 🏆 or beat Chapter ${CHAPTERS.indexOf(c) + 1}` : `${h.unlock} 🏆`; }
+function nextUnlock() { return HERO_ORDER.filter(id => !heroUnlocked(id)).map(id => HEROES[id]).sort((a, b) => a.unlock - b.unlock)[0]; }
+function nextStage() { const i = STAGES.findIndex((s, k) => stageOpen(k) && stageRec(s.id).stars === 0); return STAGES[i >= 0 ? i : STAGES.length - 1]; }
 function refreshLobby() {
   const d = Save.d, h = HEROES[d.hero], L = LV[d.level - 1];
   $('#lb-trophies').textContent = d.trophies;
@@ -73,11 +79,10 @@ function refreshLobby() {
   $('#lb-name').textContent = h.name; $('#lb-title').textContent = `${h.title} · ${h.role}`;
   $('#lb-stars').textContent = '★'.repeat(d.level); $('#lb-lvname').textContent = L.name; $('#lb-lvdesc').textContent = L.desc;
   $('#btn-level').style.background = `linear-gradient(${L.color}, #3b4fb5)`;
-  const grab = d.mode === 'grab';
-  $('#lb-mode').textContent = grab ? 'NUMBER GRAB' : 'BRAIN ROYALE'; $('#lb-modesub').textContent = grab ? '3 vs 3' : 'Solo · 6 players'; $('#lb-modeico').textContent = grab ? '💎' : '☠️';
-  $('#btn-mode').style.background = grab ? 'linear-gradient(#c28bff, #7b4dff)' : 'linear-gradient(#7fe36a, #2c9a45)';
+  const M = { adventure: ['ADVENTURE', `Next: ${nextStage().id} ${nextStage().name.replace('BOSS: ', '')}`, '🗺️', 'linear-gradient(#ffb347, #e8590c)'], grab: ['NUMBER GRAB', '3 vs 3', '💎', 'linear-gradient(#c28bff, #7b4dff)'], royale: ['BRAIN ROYALE', 'Solo · 6 players', '☠️', 'linear-gradient(#7fe36a, #2c9a45)'] }[d.mode] || [];
+  $('#lb-mode').textContent = M[0]; $('#lb-modesub').textContent = M[1]; $('#lb-modeico').textContent = M[2]; $('#btn-mode').style.background = M[3];
   const nu = nextUnlock();
-  if (nu) { const prev = Math.max(0, ...HERO_ORDER.map(id => HEROES[id].unlock).filter(u => u <= d.trophies)); $('#road-label').textContent = `Unlock ${nu.name} at ${nu.unlock} 🏆`; $('#road-fill').style.width = clamp((d.trophies - prev) / (nu.unlock - prev) * 100, 4, 100) + '%'; }
+  if (nu) { const prev = Math.max(0, ...HERO_ORDER.map(id => HEROES[id].unlock).filter(u => u <= d.trophies)); $('#road-label').textContent = `Unlock ${nu.name}: ${lockText(nu)}`; $('#road-fill').style.width = clamp((d.trophies - prev) / (nu.unlock - prev) * 100, 4, 100) + '%'; }
   else { $('#road-label').textContent = 'All heroes unlocked! Chase trophies 🏆'; $('#road-fill').style.width = '100%'; }
   $('#btn-sfx').classList.toggle('off', !d.sfx); $('#btn-music').classList.toggle('off', !d.music);
   requestAnimationFrame(() => paintPortrait($('#mini-hero'), d.hero, { bg: false, feet: 0.95, s: 0.62 }));
@@ -108,35 +113,36 @@ $('#btn-level').onclick = () => { click(); buildLevels(); modal('m-level', true)
 function buildHeroes() {
   const grid = $('#hero-grid'); grid.innerHTML = '';
   HERO_ORDER.forEach(id => {
-    const h = HEROES[id], locked = h.unlock > Save.d.trophies;
+    const h = HEROES[id], locked = !heroUnlocked(id);
     const c = document.createElement('button'); c.className = 'hcard' + (locked ? ' locked' : '') + (App.hdSel === id ? ' sel' : '');
     c.style.background = locked ? '#555' : `linear-gradient(#fff3c4, ${h.color})`;
-    c.innerHTML = `<canvas></canvas><div class="hc-name">${h.name}</div>` + (locked ? `<div class="lock ol">🔒<br>${h.unlock} 🏆</div>` : '');
+    c.innerHTML = `<canvas></canvas><div class="hc-name">${h.name}</div>` + (locked ? `<div class="lock ol">🔒<br>${lockText(h).replace(' or ', '<br>or ')}</div>` : '');
     c.onclick = () => { click(); App.hdSel = id; buildHeroes(); };
     grid.appendChild(c);
     requestAnimationFrame(() => paintPortrait(c.querySelector('canvas'), id, { bg: false, feet: 0.86 }));
   });
-  const h = HEROES[App.hdSel], locked = h.unlock > Save.d.trophies;
+  const h = HEROES[App.hdSel], locked = !heroUnlocked(h.id);
   $('#hd-name').textContent = h.name; $('#hd-role').textContent = `${h.title} · ${h.role}`;
   $('#hd-blurb').innerHTML = `${h.blurb}<br><b>SUPER: ${h.sup.name}</b>`;
   $('#hd-bars').innerHTML = [['HEALTH', h.bars.hp], ['DAMAGE', h.bars.dmg], ['RANGE', h.bars.range], ['SPEED', h.bars.speed]].map(([k, v]) => `<span>${k}</span><div class="hbar"><i style="width:${v * 20}%"></i></div>`).join('');
   const sel = $('#hd-select');
-  sel.disabled = locked; sel.querySelector('span').textContent = locked ? `🔒 ${h.unlock} 🏆` : Save.d.hero === h.id ? 'SELECTED ✓' : 'SELECT';
+  sel.disabled = locked; sel.querySelector('span').textContent = locked ? `🔒 ${lockText(h)}` : Save.d.hero === h.id ? 'SELECTED ✓' : 'SELECT';
   requestAnimationFrame(() => paintPortrait($('#hd-canvas'), h.id, { bg1: '#fff6c9', bg2: h.color, feet: 0.88 }));
 }
 $('#btn-heroes').onclick = () => { click(); App.hdSel = Save.d.hero; show('heroes'); buildHeroes(); };
-$('#hd-select').onclick = () => { const h = HEROES[App.hdSel]; if (h.unlock > Save.d.trophies) return; click(); Save.d.hero = h.id; Save.save(); buildHeroes(); Cloud.later(); };
+$('#hd-select').onclick = () => { const h = HEROES[App.hdSel]; if (!heroUnlocked(h.id)) return; click(); Save.d.hero = h.id; Save.save(); buildHeroes(); Cloud.later(); };
 
 // ---------- match flow ----------
 $('#btn-play').onclick = () => {
   click();
+  if (Save.d.mode === 'adventure') { openStages(); openStageCard(nextStage()); return; }
   if (!Save.d.seenHow) { Save.d.seenHow = true; Save.save(); App.afterHow = startMatch; modal('m-how', true); return; }
   startMatch();
 };
 function startMatch(stage) {
   Sound.init();
-  App.session = { asked: 0, correct: 0, streak: 0, best: 0 };
-  App.stage = stage || null;
+  App.session = { asked: 0, correct: 0, first: 0, streak: 0, best: 0 };
+  App.stage = stage || null; App.unlockedBefore = unlockedSet();
   const mode = stage ? (stage.type === 'grab' ? 'grab' : stage.type === 'royale' ? 'royale' : 'solo') : Save.d.mode;
   const level = stage ? stage.math : Save.d.level;
   App.game = new Game({ mode, level, heroId: Save.d.hero, ui: GameUI, stage });
@@ -199,7 +205,27 @@ const GameUI = {
   trap(num, rule) { this.banner('TRAP GEM!', `${num} doesn't fit: ${rule.why ? rule.why(num) : ''}`, '#9ffcff', 2.2); },
   newRule(rule) { setRule(rule); this.banner('NEW RULE!', rule.t, '#e8c2ff', 2.2); },
   end(res) { showResults(res); },
+  tip(id) {
+    const t = TIPS[id]; if (!t || Save.d.tips[id]) return;
+    Save.d.tips[id] = 1; Save.save(false);
+    const html = typeof t === 'string' ? t : App.last === 'touch' ? t.m : t.d;
+    tipQueue.push(html); if (tipQueue.length === 1) nextTip();
+  },
 };
+const TIPS = {
+  move: { d: '🎮 Move with <b>WASD</b> · aim with the <b>mouse</b> · <b>click</b> to shoot', m: '🎮 Left thumb moves · right thumb: drag to aim, let go to shoot (tap = auto-aim)' },
+  crate: '📦 Shoot the purple <b>?</b> crate. A Brain Cube is inside!',
+  cube: { d: '🧊 A Brain Cube is in your pocket! Press <b>Q</b> when it is safe to open it for POWER.', m: '🧊 A Brain Cube is in your pocket! Tap the pink <b>🧠</b> button when it is safe.' },
+  super: { d: '⭐ SUPER ready! Press <b>SPACE</b> or right-click.', m: '⭐ SUPER ready! Drag the yellow ★ button to aim it.' },
+  gems: '💎 Only grab gems whose number fits the <b>RULE</b> at the top. Wrong ones are traps!',
+  shield: { d: '🛡️ MATH SHIELD! Press <b>Q</b> and solve a problem to smash it.', m: '🛡️ MATH SHIELD! Tap the <b>🧠</b> button and solve a problem to smash it.' },
+};
+const tipQueue = [];
+function nextTip() {
+  const el = $('#tip'); if (!tipQueue.length) { el.classList.remove('on'); return; }
+  el.innerHTML = tipQueue[0]; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  setTimeout(() => { tipQueue.shift(); nextTip(); }, 5200);
+}
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function setRule(rule) {
   $('#rule-txt').textContent = rule.t; $('#rule-hint').textContent = rule.hint || '';
@@ -225,8 +251,8 @@ function updateHUD() {
     const b = g.boss;
     if (b) {
       $('#bb-fill').style.width = clamp(b.hp / b.maxHp, 0, 1) * 100 + '%'; setText('bb-hp', `${Math.max(0, Math.ceil(b.hp)).toLocaleString('en-US')} / ${b.maxHp.toLocaleString('en-US')}`);
-      const sh = b.alive && b.shield, el = $('#bb-shield'); el.classList.toggle('down', !sh);
-      setText('bb-shield', !b.alive ? '💥 DEFEATED' : sh ? (g.shieldCD > 0 ? `🛡️ MATH SHIELD UP · try again in ${Math.ceil(g.shieldCD)} s` : '🛡️ MATH SHIELD UP · press Q or 🧠 to break it') : `⚔️ SHIELD DOWN! ATTACK! (${Math.ceil(b.shieldT)} s)`);
+      const sh = b.alive && b.shield, el = $('#bb-shield'); el.classList.toggle('down', !sh && b.vuln > 0);
+      setText('bb-shield', !b.alive ? '💥 DEFEATED' : sh ? (g.shieldCD > 0 ? `🛡️ MATH SHIELD UP · try again in ${Math.ceil(g.shieldCD)} s` : '🛡️ MATH SHIELD UP · press Q or 🧠 to smash it') : b.vuln > 0 ? `⚔️ VULNERABLE! +25% damage · ${Math.ceil(b.vuln)} s` : `🛡️ Shield regrowing… ${Math.ceil(b.shieldT)} s`);
     }
   } else {
     setText('roy-left', String(g.fighters.filter(f => f.alive).length));
@@ -235,27 +261,32 @@ function updateHUD() {
   const sp = Math.round(p.super * 100), ab = $('#ab-super');
   if (hudCache.sup !== sp) { hudCache.sup = sp; $('#ab-ring').style.setProperty('--p', sp); ab.classList.toggle('ready', sp >= 100); }
   if (g.gemsOn) $('#rule-fill').style.width = (g.ruleT / g.ruleLen * 100) + '%';
-  const bb = $('#ab-brain'), shieldUp = g.boss && g.boss.alive && g.boss.shield;
-  const cd = Math.ceil(shieldUp ? g.shieldCD : g.brainCD);
-  bb.classList.toggle('cool', cd > 0 || !p.alive); bb.classList.toggle('shieldb', !!shieldUp);
-  setText('ab-brain-txt', cd > 0 ? `READY IN ${cd}` : shieldUp ? 'BREAK SHIELD' : 'BRAIN CHARGE');
+  const bb = $('#ab-brain'), o = g.mathOption();
+  let label = 'BRAIN', cool = true;
+  if (o.type === 'shield') { cool = o.cd > 0; label = cool ? `READY IN ${Math.ceil(o.cd)}` : 'SMASH SHIELD'; }
+  else if (o.type === 'cube') { cool = false; label = `OPEN CUBE ×${o.n}`; }
+  else if (o.type === 'charge') { cool = o.cd > 0 || o.full; label = o.cd > 0 ? `READY IN ${Math.ceil(o.cd)}` : o.full ? 'SUPER READY' : 'CHARGE SUPER'; }
+  bb.classList.toggle('cool', cool); bb.classList.toggle('shieldb', o.type === 'shield'); bb.classList.toggle('cubeb', o.type === 'cube');
+  setText('ab-brain-txt', label);
   if (!p.alive && g.mode !== 'royale') setText('dead-s', g.mode === 'solo' ? `Respawning in ${Math.max(1, Math.ceil(p.respawnT))}… (${g.lives} ${g.lives === 1 ? 'life' : 'lives'} left)` : `Respawning in ${Math.max(1, Math.ceil(p.respawnT))}…`);
 }
-$('#ab-brain').onclick = () => brainCharge();
-function brainCharge() {
+$('#ab-brain').onclick = () => mathButton();
+// The 🧠 button always does the most useful math move right now:
+// smash a nearby Math Shield > open a pocketed Brain Cube > charge your SUPER.
+function mathButton() {
   const g = App.game; if (!g || g.phase !== 'play' || g.paused || App.pauseOn || Quiz.isOpen) return;
-  const p = g.player; if (!p.alive) return;
-  const b = g.boss;
-  if (b && b.alive && b.shield) {
-    if (g.shieldCD > 0) { toast(`Try again in ${Math.ceil(g.shieldCD)} s`); return; }
-    g.shieldCD = 5;
-    Quiz.open('shield', ok => { if (ok) g.breakShield(); else toast('The shield holds! Try another problem in a few seconds.'); });
+  const p = g.player, o = g.mathOption(); if (!o.type) return;
+  if (o.type === 'shield') {
+    if (o.cd > 0) { toast(`Try again in ${Math.ceil(o.cd)} s`); return; }
+    const target = o.target;
+    Quiz.open('shield', (ok, fast, retry) => { if (ok) g.breakShield(target, fast ? 'fast' : retry ? 'retry' : 'ok'); else { g.shieldCD = 4; toast('The shield holds! Try another problem in a moment.'); } });
     return;
   }
-  if (g.brainCD > 0) { toast(`Brain Charge ready in ${Math.ceil(g.brainCD)} s`); return; }
-  if (p.super >= 1) { toast('Your SUPER is already charged! Use it (SPACE / yellow button)'); return; }
+  if (o.type === 'cube') { p.cubesHeld--; Quiz.open('cube', (ok, fast, retry) => g.rewardCube(ok, fast, retry)); return; }
+  if (o.cd > 0) { toast(`Brain Charge ready in ${Math.ceil(o.cd)} s. Smash ? crates for Brain Cubes!`); return; }
+  if (o.full) { toast('Your SUPER is already charged! Use it (SPACE / yellow button)'); return; }
   g.brainCD = 25;
-  Quiz.open('charge', ok => { if (ok) { p.super = 1; p.ammo = 3; g.float(p, 'SUPER CHARGED!', '#ffd23f', 22); } });
+  Quiz.open('charge', (ok, fast, retry) => { if (ok) { p.super = retry ? Math.max(p.super, 0.6) : 1; p.ammo = 3; g.float(p, retry ? 'SUPER +60%' : 'SUPER CHARGED!', '#ffd23f', 22); } });
 }
 $('#btn-revive').onclick = () => {
   const g = App.game; if (!g || g.player.alive || Quiz.isOpen) return;
@@ -289,13 +320,13 @@ function showResults(res) {
   }
   const before = d.trophies; d.trophies = Math.max(0, d.trophies + delta); const real = d.trophies - before;
   d.games++; if (title === 'VICTORY!') d.wins++;
-  const unlocked = HERO_ORDER.map(id => HEROES[id]).filter(h => h.unlock > before && h.unlock <= d.trophies);
+  const unlocked = HERO_ORDER.map(id => HEROES[id]).filter(h => !App.unlockedBefore.has(h.id) && heroUnlocked(h.id));
   Save.save();
   $('#res-title').textContent = title; $('#res-title').style.color = color; $('#res-sub').textContent = sub;
-  const acc = S.asked ? Math.round(100 * S.correct / S.asked) + '%' : '–';
+  const acc = S.asked ? Math.round(100 * (S.first || 0) / S.asked) + '%' : '–';
   const rows = [['Knockouts', p.stats.ko], ['Damage dealt', p.stats.dmg.toLocaleString('en-US')]];
   if (g.mode === 'grab') rows.push(['Gems grabbed', p.stats.gems]); else rows.push(['Power level', p.power]);
-  rows.push(['Problems solved', `${S.correct} / ${S.asked}`], ['Accuracy', acc], ['Best streak', `🔥 ${S.best}`]);
+  rows.push(['Problems solved', `${S.correct} / ${S.asked}`], ['First-try accuracy', acc], ['Best streak', `🔥 ${S.best}`]);
   $('#res-stats').innerHTML = rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('') + (brain ? `<span class="k">Brain bonus</span><span class="v" style="color:#ff8be6">+${brain} 🏆</span>` : '');
   $('#res-trophy').textContent = `${real >= 0 ? '+' : ''}${real} 🏆  (${d.trophies})`;
   $('#res-unlock').innerHTML = unlocked.map(h => `<span>🎉 NEW HERO UNLOCKED: ${h.name}!</span>`).join(' ');
@@ -335,6 +366,11 @@ function buildStages() {
       n.onclick = () => { click(); if (!open) { toast(`Get at least 1 ⭐ on stage ${STAGES[i - 1].id} first!`); return; } openStageCard(st); };
       w.appendChild(n); path.appendChild(w);
     });
+    if (c.reward && HEROES[c.reward.hero]) {
+      const h = HEROES[c.reward.hero], got = heroUnlocked(h.id), w = document.createElement('div'); w.className = 'node-wrap';
+      w.innerHTML = `<div class="link"></div><div class="node reward${got ? ' done' : ''}"><span class="disc"><canvas></canvas></span><span class="num">${got ? '✓ UNLOCKED' : '🎁 REWARD'}</span><span class="nm">${esc(h.name)}</span></div>`;
+      path.appendChild(w); requestAnimationFrame(() => paintPortrait(w.querySelector('canvas'), h.id, { bg: false, feet: 0.92 }));
+    }
     box.appendChild(el);
   });
   const soon = document.createElement('div'); soon.className = 'soon'; soon.textContent = `🚧 CHAPTER ${CHAPTERS.length + 1} · COMING SOON`; box.appendChild(soon);
@@ -356,27 +392,27 @@ function openStageCard(st) {
 function showStageResults(res) {
   const st = STAGES.find(s => s.id === res.stage), g = App.game, p = g.player, S = App.session, d = Save.d;
   const cleared = res.outcome === 'clear' || res.outcome === 'win' || (res.outcome === 'place' && res.rank <= (st.clearRank || 3));
-  const r = { cleared, deaths: res.deaths, time: res.time, traps: res.traps, hp: res.hp, rank: res.rank };
+  const r = { cleared, deaths: res.deaths, time: res.time, traps: res.traps, hp: res.hp, rank: res.rank, gems: res.gems, kos: res.kos };
   const met = st.stars.map(s => starMet(s, r, S)), earned = met.filter(Boolean).length;
   const rec = Object.assign({ stars: 0, best: null, clears: 0 }, d.stages[st.id]);
   const newStars = Math.max(0, earned - rec.stars), before = d.trophies;
   rec.stars = Math.max(rec.stars, earned);
   if (cleared) { rec.clears++; rec.best = rec.best == null ? res.time : Math.min(rec.best, res.time); }
   d.stages[st.id] = rec; d.trophies += newStars * TROPHIES_PER_STAR; d.games++; if (cleared) d.wins++;
-  const unlocked = HERO_ORDER.map(id => HEROES[id]).filter(h => h.unlock > before && h.unlock <= d.trophies);
+  const unlocked = HERO_ORDER.map(id => HEROES[id]).filter(h => !App.unlockedBefore.has(h.id) && heroUnlocked(h.id));
   Save.save(); Cloud.later(300);
   const i = STAGES.indexOf(st), nx = STAGES[i + 1];
   $('#res-title').textContent = cleared ? 'STAGE CLEAR!' : 'STAGE FAILED'; $('#res-title').style.color = cleared ? '#ffd23f' : '#ff6b6b';
   $('#res-sub').textContent = cleared ? (newStars ? `You earned ${newStars} new star${newStars > 1 ? 's' : ''}!` : earned === 3 ? 'Perfect run!' : 'Try again for more stars!') : (res.why || 'Give it another go!') + ' Problems you solve make you stronger.';
   const stars = $('#res-stars'); stars.classList.add('on'); stars.innerHTML = '<span>★</span><span>★</span><span>★</span>';
   [...stars.children].forEach((e, k) => { if (k < earned) setTimeout(() => { e.classList.add('lit'); Sound.play('ready'); }, 500 + k * 450); });
-  const acc = S.asked ? Math.round(100 * S.correct / S.asked) + '%' : '–';
-  const rows = [['Time', `${res.time} s`], ['Knockouts', p.stats.ko], ['Problems solved', `${S.correct} / ${S.asked}`], ['Accuracy', acc]];
+  const acc = S.asked ? Math.round(100 * (S.first || 0) / S.asked) + '%' : '–';
+  const rows = [['Time', `${res.time} s`], ['Knockouts', p.stats.ko], ['Problems solved', `${S.correct} / ${S.asked}`], ['First-try accuracy', acc]];
   $('#res-stats').innerHTML = rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('');
   const goals = $('#res-goals'); goals.classList.add('on');
   goals.innerHTML = st.stars.map((s, k) => `<div class="${met[k] ? 'y' : 'n'}">${met[k] ? '✅' : '❌'} ${esc(starText(s, st))}</div>`).join('');
   $('#res-trophy').textContent = newStars ? `+${newStars * TROPHIES_PER_STAR} 🏆  (${d.trophies})` : `🏆 ${d.trophies}`;
-  $('#res-unlock').innerHTML = unlocked.map(h => `<span>🎉 NEW HERO UNLOCKED: ${h.name}!</span>`).join(' ') + (cleared && nx && rec.clears === 1 ? `<span>🔓 Stage ${nx.id} is open!</span>` : '');
+  $('#res-unlock').innerHTML = unlocked.map(h => `<span>🎉 NEW HERO UNLOCKED: ${h.name}! Pick them in HEROES</span>`).join(' ') + (cleared && nx && rec.clears === 1 ? `<span>🔓 Stage ${nx.id} is open!</span>` : '');
   $('#btn-lobby span').textContent = 'STAGES'; $('#btn-again span').textContent = 'RETRY';
   $('#btn-next').classList.toggle('on', !!(nx && stageOpen(i + 1)));
   show('results'); Music.stop(); Sound.play(cleared ? 'win' : 'lose');
@@ -417,18 +453,23 @@ $('#cl-input').addEventListener('keydown', e => e.stopPropagation());
 
 // ---------- quiz ----------
 const KINDS = {
-  cube: { badge: '🧊 BRAIN CUBE', cls: '', reward: 'Solve it → <b>+1 POWER</b> (more health & damage) + SUPER charge. Answer fast for a GENIUS bonus!' },
+  cube: { badge: '🧊 BRAIN CUBE', cls: '', reward: 'Solve it → <b>+1 POWER</b> (more health & damage) + SUPER charge. Fast answer = GENIUS bonus!' },
+  continue: { badge: '💪 KEEP GOING?', cls: 'revive', reward: 'Solve it → get <b>1 more life</b> and jump straight back in!' },
   charge: { badge: '⚡ BRAIN CHARGE', cls: 'charge', reward: 'Solve it → your <b>SUPER</b> is fully charged and your ammo refills!' },
   revive: { badge: '💫 QUICK REVIVE', cls: 'revive', reward: 'Solve it → jump right back into the fight!' },
   second: { badge: '❤️ SECOND CHANCE', cls: 'second', reward: 'Solve it → get back up with half your health! Miss it and you\'re out.' },
-  shield: { badge: '🛡️ SHIELD BREAKER', cls: 'shield', reward: 'Solve it → the boss\'s <b>MATH SHIELD</b> breaks and it gets stunned. Then attack!' },
+  shield: { badge: '🛡️ SHIELD SMASHER', cls: 'shield', reward: 'Solve it → the <b>MATH SHIELD</b> smashes and the enemy takes <b>+25% damage</b> for a while. Fast answer = longer!' },
   gym: { badge: '🏋️ BRAIN GYM', cls: 'gym', reward: 'Practice mode: no timer pressure. Every answer comes with a solution.' },
 };
 const Quiz = {
   isOpen: false, pad: null, padOn: false,
   open(kind, cb) {
-    this.isOpen = true; this.kind = kind; this.cb = cb; this.done = false; this.result = null;
-    const g = kind === 'gym' ? null : App.game, lvl = g ? g.level : Save.d.level, L = LV[lvl - 1];
+    this.isOpen = true; this.kind = kind; this.cb = cb; this.done = false; this.result = null; this.tries = 0; this.firstWrong = -1;
+    const g = kind === 'gym' ? null : App.game;
+    // Stages adapt: the level follows how this player is doing, within 1 of the stage's level
+    let lvl = g ? g.level : Save.d.level;
+    if (g && g.stage) lvl = clamp(Math.round(Save.d.mrating || Save.d.level || 2), Math.max(1, g.stage.math - 1), Math.min(5, g.stage.math + 1));
+    const L = LV[lvl - 1];
     this.lvl = lvl; this.q = BBMath.make(lvl, g && g.stage ? g.stage.topics : null); this.limit = kind === 'gym' ? 0 : L.time; this.t0 = performance.now(); this.elapsedPaused = 0;
     if (App.game) { App.game.paused = true; resetHeld(); }
     const K = KINDS[kind];
@@ -462,27 +503,42 @@ const Quiz = {
     if (left <= 0) this.answer(-1);
   },
   answer(i) {
-    if (this.done) return; this.done = true;
-    const q = this.q, ok = i === q.correct, secs = (performance.now() - this.t0) / 1000, fast = ok && this.limit && secs < this.limit * 0.35;
-    this.result = { ok, fast };
+    if (this.done || (i >= 0 && i === this.firstWrong)) return;
+    const q = this.q, ok = i === q.correct;
+    // first miss: one more try (a time-out or skip ends the problem)
+    if (!ok && i >= 0 && this.tries === 0 && this.kind !== 'gym') {
+      this.tries = 1; this.firstWrong = i;
+      const b = $$('#q-choices .qc')[i]; if (b) { b.classList.add('wrong', 'out'); b.disabled = true; }
+      const res = $('#q-result');
+      res.innerHTML = `<span class="big">🤔 Not quite! One more try…</span>Take another look. Solve it now and you still get ${this.kind === 'cube' ? '+1 POWER' : 'the reward'}${this.kind === 'cube' || this.kind === 'charge' || this.kind === 'shield' ? ' (a bit smaller)' : ''}.`;
+      res.className = 'qresult on retry'; Sound.play('wrong', 1.3);
+      return;
+    }
+    this.done = true;
+    const retry = this.tries > 0, secs = (performance.now() - this.t0) / 1000, fast = ok && !retry && this.limit && secs < this.limit * 0.35;
+    this.result = { ok, fast, retry };
     const btns = $$('#q-choices .qc'); $('#q-choices').classList.add('done');
-    btns.forEach((b, k) => { if (k === q.correct) b.classList.add('right'); else if (k === i) b.classList.add('wrong'); else b.classList.add('dim'); });
-    // stats
-    const d = Save.d, lv = this.lvl || d.level; d.asked++; if (ok) d.correct++; d.lv[lv] = d.lv[lv] || { a: 0, c: 0 }; d.lv[lv].a++; if (ok) d.lv[lv].c++;
+    btns.forEach((b, k) => { if (k === q.correct) b.classList.add('right'); else if (k === i || k === this.firstWrong) b.classList.add('wrong'); else b.classList.add('dim'); });
+    // stats: accuracy counts first tries; "solved" counts both
+    const d = Save.d, lv = this.lvl || d.level, first = ok && !retry; d.asked++; if (first) d.correct++; d.lv[lv] = d.lv[lv] || { a: 0, c: 0 }; d.lv[lv].a++; if (first) d.lv[lv].c++;
     let streak;
     if (this.kind === 'gym') { const s = App.gym; s.a++; if (ok) { s.c++; s.streak++; } else s.streak = 0; streak = s.streak; }
-    else { const S = App.session; S.asked++; if (ok) { S.correct++; S.streak++; S.best = Math.max(S.best, S.streak); } else S.streak = 0; streak = S.streak; }
-    if (ok) d.bestStreak = Math.max(d.bestStreak, streak);
+    else {
+      const S = App.session; S.asked++; if (ok) S.correct++; if (first) { S.first = (S.first || 0) + 1; S.streak++; S.best = Math.max(S.best, S.streak); } else S.streak = 0; streak = S.streak;
+      d.mrating = clamp((d.mrating || d.level || 2) + (ok ? (retry ? 0.05 : fast ? 0.45 : 0.3) : -0.45), 1, 5);
+    }
+    if (first) d.bestStreak = Math.max(d.bestStreak, streak);
     Save.save();
     const res = $('#q-result');
-    const head = ok ? (fast ? '⚡ GENIUS! Lightning fast!' : choice(['✅ CORRECT!', '✅ NAILED IT!', '✅ BRILLIANT!', '✅ YES!'])) : i === -1 ? `⏰ TIME'S UP! The answer is (${'ABCDE'[q.correct]}) ${q.answer}` : i === -2 ? `⏭️ SKIPPED. The answer is (${'ABCDE'[q.correct]}) ${q.answer}` : `❌ NOT QUITE. The answer is (${'ABCDE'[q.correct]}) ${q.answer}`;
-    res.innerHTML = `<span class="big">${head}${ok && streak >= 2 ? ` 🔥 ${streak} in a row` : ''}</span>${q.why}`;
+    const head = ok ? (retry ? '✅ GOT IT on the second try!' : fast ? '⚡ GENIUS! Lightning fast!' : choice(['✅ CORRECT!', '✅ NAILED IT!', '✅ BRILLIANT!', '✅ YES!'])) : i === -1 ? `⏰ TIME'S UP! The answer is (${'ABCDE'[q.correct]}) ${q.answer}` : i === -2 ? `⏭️ SKIPPED. The answer is (${'ABCDE'[q.correct]}) ${q.answer}` : `❌ NOT QUITE. The answer is (${'ABCDE'[q.correct]}) ${q.answer}`;
+    res.innerHTML = `<span class="big">${head}${first && streak >= 2 ? ` 🔥 ${streak} in a row` : ''}</span>${q.why}`;
     res.className = 'qresult on ' + (ok ? 'good' : 'bad');
     Sound.play(ok ? 'correct' : 'wrong');
+    if (ok) confetti(fast ? 46 : 28);
     $('#q-next').classList.add('on'); $('#q-next span').textContent = this.kind === 'gym' ? 'NEXT PROBLEM ▶' : 'CONTINUE ▶';
     $('#q-skip').style.display = 'none';
     if (this.kind === 'gym') this.renderGym();
-    else if (ok) { clearTimeout(this.autoT); this.autoT = setTimeout(() => { if (this.isOpen && this.done) this.close(); }, 2600); }
+    else if (ok) { clearTimeout(this.autoT); this.autoT = setTimeout(() => { if (this.isOpen && this.done) this.close(); }, retry ? 2400 : 1900); }
     setTimeout(() => res.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
   },
   close() {
@@ -492,13 +548,21 @@ const Quiz = {
     this.isOpen = false; modal('quiz', false);
     const r = this.result || { ok: false, fast: false };
     if (App.game) { App.game.paused = false; resetHeld(); }
-    const cb = this.cb; this.cb = null; if (cb) cb(r.ok, r.fast);
+    const cb = this.cb; this.cb = null; if (cb) cb(r.ok, r.fast, r.retry);
   },
   setPad(on) { this.padOn = on; $('#q-pad').classList.toggle('on', on); $('#q-clear').classList.toggle('on', on); $('#q-scratch').textContent = on ? '✏️ Hide pad' : '✏️ Scratch pad'; if (on) this.sizePad(); },
   sizePad() { const c = $('#q-pad'), r = c.getBoundingClientRect(); const dpr = Math.min(2, window.devicePixelRatio || 1); if (c.width !== Math.round(r.width * dpr)) { c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); } },
   clearPad() { const c = $('#q-pad'); c.getContext('2d').clearRect(0, 0, c.width, c.height); },
 };
 $('#q-next').onclick = () => { click(); Quiz.close(); };
+function confetti(n) {
+  const card = $('.qcard'), cols = ['#ffd23f', '#ff8be6', '#5ec8ff', '#7dff6a', '#ff6b6b', '#c28bff'];
+  for (let i = 0; i < n; i++) {
+    const e = document.createElement('i'); e.className = 'confetti';
+    e.style.cssText = `--dx:${rand(-260, 260)}px;--dy:${rand(-220, 60)}px;--r:${rand(-540, 540)}deg;background:${choice(cols)};left:${rand(30, 70)}%;animation-delay:${rand(0, 0.12)}s`;
+    card.appendChild(e); setTimeout(() => e.remove(), 1400);
+  }
+}
 $('#q-skip').onclick = () => { click(); Quiz.answer(-2); };
 $('#q-scratch').onclick = () => { click(); Quiz.setPad(!Quiz.padOn); };
 $('#q-clear').onclick = () => { click(); Quiz.clearPad(); };
@@ -526,7 +590,7 @@ window.addEventListener('keydown', e => {
   if (k === 'escape' || k === 'p') { setPause(!App.pauseOn); return; }
   if (App.pauseOn) return;
   if (k === ' ' || k === 'e') { App.game.input.sup = true; e.preventDefault(); return; }
-  if (k === 'q') { brainCharge(); return; }
+  if (k === 'q') { mathButton(); return; }
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys.add(k); setLast('mouse'); e.preventDefault(); }
 });
 window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));

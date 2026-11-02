@@ -38,20 +38,18 @@ const MAPS = {
     'BBB........',
   ] },
   royale: { theme: 'jungle', mirrorX: true, mirrorY: true, rows: [
-    'BBBB....BB....',
-    'BB..C......C..',
-    'B.....##......',
-    '......##..BB..',
-    '..C.......BBC.',
-    '.##..BB.......',
-    '.##..BBC..~~..',
-    '..........~~..',
-    '..C...==......',
-    'BB....==..C...',
-    'BB..........BB',
-    '...C..BB.....B',
-    '......BB..C...',
-    '..##.....B....',
+    'BBB....BB...',
+    'B..C......C.',
+    '.....##.....',
+    '.....##..BB.',
+    '.C.......BBC',
+    '.##..BB.....',
+    '.##..BBC..~~',
+    '..........~~',
+    'BB...==.....',
+    'BB.C......C.',
+    '.....BB....B',
+    '..##....B...',
   ] },
 };
 function expandRows(def) {
@@ -74,6 +72,7 @@ class Fighter {
     this.gems = 0; this.burstQ = []; this.dash = null; this.leap = null; this.z = 0;
     this.inBush = false; this.revealT = 0; this.superAnnounced = false; this.seed = Math.random() * 9;
     this.stats = { ko: 0, deaths: 0, dmg: 0, gems: 0, cubes: 0 };
+    this.cubesHeld = 0; this.structure = !!this.def.structure; this.shield = false; this.shieldT = 0; this.vuln = 0; this.stun = 0;
     this.sprite = document.createElement('canvas'); this.spriteZoom = 0;
     this.spawn = { x: 0, y: 0 };
   }
@@ -86,7 +85,7 @@ class Game {
     this.kind = this.stage ? this.stage.type : this.mode;
     const sm = this.stage && this.stage.map, def = sm ? (typeof sm === 'string' ? MAPS[sm] : sm) : MAPS[this.mode];
     this.theme = THEMES[(this.stage && this.stage.theme) || def.theme] || THEMES.canyon;
-    this.marks = { P: [], E: [], M: [], K: [] };
+    this.marks = { P: [], E: [], M: [], K: [], F: [] };
     const rows = expandRows(def); this.h = rows.length; this.w = rows[0].length;
     const n = this.w * this.h;
     this.tile = new Uint8Array(n); this.bush = new Uint8Array(n); this.crateHp = new Float32Array(n); this.tshake = new Float32Array(n);
@@ -105,7 +104,7 @@ class Game {
     this.cam = { x: 0, y: 0, s: 1, shake: 0 }; this.vw = 800; this.vh = 600;
     this.brainCD = 0; this.secondUsed = false; this.quizCount = 0; this.gemId = 0;
     const S = this.stage || {};
-    this.playTime = 0; this.traps = 0; this.solved = 0; this.kills = 0; this.shieldCD = 0;
+    this.playTime = 0; this.traps = 0; this.solved = 0; this.kills = 0; this.shieldCD = 0; this.slow = 0; this.koTimes = []; this.gemCombo = []; this.tipT = 0;
     this.makeTeams(o.heroId);
     this.gemsOn = this.mode === 'grab' || this.kind === 'gems';
     if (this.gemsOn) {
@@ -118,6 +117,9 @@ class Game {
     else {
       this.clock = S.time || 0; this.lives = S.lives || 3; this.waveIdx = -1; this.waveT = 1.2; this.swarmT = 2;
       if (S.boss) { const k = this.marks.K[0] || { x: this.w * T / 2, y: 3 * T }; this.boss = this.spawnEnemy(Object.assign({ skill: 0.5 }, S.boss), k, true); }
+      this.factories = []; this.factoriesDown = 0;
+      if (S.factories) for (const m of this.marks.F) this.factories.push(this.spawnEnemy(Object.assign({ hero: 'factory' }, S.factories), m, true));
+      this.supplyT = S.supply ? S.supply.every : 0; this.continueT = 0; this.continueUsed = false;
     }
     const p = this.player; this.cam.x = p.x; this.cam.y = p.y;
   }
@@ -141,8 +143,10 @@ class Game {
         f.spawn = { x: (sp[i][0] + 0.5) * T, y: (sp[i][1] + 0.5) * T }; this.fighters.push(f); if (i === 1) this.player = f;
         else f.bot = new Bot(this, f, skill * 0.95, ['left', 'mid', 'right'][i]);
       }
+      const S = this.stage || {};
       for (let i = 0; i < 3; i++) {
         const f = new Fighter(this, botHero(), 1, { name: names.pop() });
+        if (S.enemyHp) { f.baseHp = f.maxHp = f.hp = Math.round(f.def.hp * S.enemyHp); } if (S.enemyDmg) f.dmgScale = S.enemyDmg;
         f.spawn = { x: (ep[i][0] + 0.5) * T, y: (ep[i][1] + 0.5) * T }; f.bot = new Bot(this, f, skill, ['right', 'mid', 'left'][i]); this.fighters.push(f);
       }
     } else {
@@ -164,12 +168,12 @@ class Game {
     const nm = spec.name || (H.minion || H.boss ? H.name : (this.names && this.names.pop()) || H.name);
     const f = new Fighter(this, heroId, 1, { name: nm });
     const pts = at ? [at] : this.marks.E.length ? this.marks.E : [{ x: this.w * T / 2, y: 1.5 * T }];
-    const p0 = choice(pts), spot = this.nearestOpen(p0.x + rand(-18, 18), p0.y + rand(-18, 18));
+    const p0 = choice(pts), j = H.structure ? 0 : 18, spot = H.structure ? { x: p0.x, y: p0.y } : this.nearestOpen(p0.x + rand(-j, j), p0.y + rand(-j, j));
     f.x = f.spawn.x = spot.x; f.y = f.spawn.y = spot.y;
     f.baseHp = Math.round(H.hp * (spec.hp || 1)); f.maxHp = f.hp = f.baseHp; f.dmgScale = spec.dmg || 1;
     f.aim = f.face = Math.atan2(this.player.y - f.y, this.player.x - f.x);
     const sk = spec.skill != null ? spec.skill : this.stage && this.stage.skill != null ? this.stage.skill : 0.45;
-    f.bot = H.boss ? new BossAI(this, f, spec) : new Bot(this, f, sk, 'solo');
+    f.bot = H.boss ? new BossAI(this, f, spec) : H.structure ? new FactoryAI(this, f, spec) : new Bot(this, f, sk, 'solo');
     f.invuln = quiet ? 0 : 1;
     if (!quiet) this.puff(f.x, f.y, 8, 'rgba(255,120,120,0.85)');
     this.fighters.push(f);
@@ -184,15 +188,43 @@ class Game {
     if (S.type === 'cubes') return { ico: '🧊', txt: 'SOLVE BRAIN CUBES', cur: this.solved, goal: S.goal };
     if (S.type === 'survive') return { ico: '⏱️', txt: 'SURVIVE!', cur: Math.min(S.time, Math.floor(S.time - this.clock)), goal: S.time };
     if (S.type === 'boss') return { ico: '👑', txt: 'DEFEAT THE BOSS', cur: 0, goal: 0 };
+    if (S.type === 'factories') return { ico: '🏭', txt: 'DESTROY THE FACTORIES', cur: this.factoriesDown, goal: this.factories.length };
     return null;
   }
-  breakShield() {
-    const b = this.boss; if (!b || !b.alive) return;
-    b.shield = false; b.shieldT = (this.stage.boss && this.stage.boss.shieldTime) || 8; b.stun = 1.6;
+  // ---------- the 🧠 math button ----------
+  // A Math Shield blocks 80% of damage. Solving a problem smashes it: the enemy is VULNERABLE
+  // (+25% damage) for a while, then the shield slowly regrows (normal damage) and comes back.
+  shieldTarget() {
+    const P = this.player; let best = null, bd = 1e9;
+    for (const e of this.fighters) {
+      if (!e.alive || !e.shield || e.team === P.team) continue;
+      const d = dist(P.x, P.y, e.x, e.y); if (!e.def.boss && d > 9.5 * T) continue;
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+  mathOption() {
+    const P = this.player; if (!P.alive) return { type: null };
+    const sh = this.shieldTarget(); if (sh) return { type: 'shield', target: sh, cd: this.shieldCD };
+    if (P.cubesHeld > 0) return { type: 'cube', n: P.cubesHeld, cd: 0 };
+    return { type: 'charge', cd: this.brainCD, full: P.super >= 1 };
+  }
+  rewardCube(ok, fast, retry) {
+    const f = this.player;
+    if (!ok) { this.float(f, 'The cube fizzled…', '#ccc', 18); return; }
+    this.solved++; this.powerUp(f, fast ? 'GENIUS! +POWER' : 'POWER UP!');
+    if (!retry) f.super = Math.min(1, f.super + (fast ? 0.6 : 0.4));
+  }
+  tip(id) { if (this.ui.tip) this.ui.tip(id); }
+  breakShield(b, how = 'ok') {
+    b = b || this.shieldTarget(); if (!b || !b.alive) return;
+    const spec = b.bot && b.bot.spec, base = (spec && spec.shieldTime) || 10;
+    const win = Math.round(base * (how === 'retry' ? 0.7 : 1) + (how === 'fast' ? 3 : 0));
+    b.shield = false; b.vuln = win; b.shieldT = spec && spec.regrow === false ? 0 : win + 6; b.stun = b.def.boss ? 1.6 : 0.8;
     this.cam.shake = 10; Sound.play('boom', 0.7);
     for (let k = 0; k < 26; k++) { const a = rand(0, TAU), s = rand(150, 420); this.parts.push({ type: 'spark', x: b.x, y: b.y - 50, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.5, max: 0.5, size: 4, color: '#9ffcff' }); }
     this.parts.push({ type: 'ring', x: b.x, y: b.y, life: 0.5, max: 0.5, size: 3 * T, color: '#9ffcff' });
-    this.ui.banner('SHIELD BROKEN!', `Attack now! It comes back in ${b.shieldT} seconds`, '#9ffcff', 2);
+    this.ui.banner('SHIELD SMASHED!', `+25% damage for ${win} seconds. Attack!`, '#9ffcff', 2);
   }
   setView(W, H) {
     this.vw = W; this.vh = H;
@@ -230,12 +262,13 @@ class Game {
   // ---------- update ----------
   update(dt) {
     if (this.paused || this.over) return;
+    if (this.slow > 0) { this.slow -= dt; dt *= 0.3; }
     this.time += dt;
     if (this.phase === 'intro') {
       const before = Math.ceil(this.introT - 0.4); this.introT -= dt; const after = Math.ceil(this.introT - 0.4);
       if (after !== before && after > 0) { this.ui.banner(String(after), '', '#fff', 0.8, true); Sound.play('tick'); }
       if (this.introT <= 0.4 && before > 0) { this.ui.banner('GO!', this.stage && this.stage.goalText ? this.stage.goalText : this.mode === 'grab' ? 'Grab gems that match the rule!' : 'Break crates, solve, survive!', '#ffd23f', 1.3, true); Sound.play('go'); }
-      if (this.introT <= 0) this.phase = 'play';
+      if (this.introT <= 0) { this.phase = 'play'; this.onStart(); }
       this.updateCamera(dt); this.updateFx(dt);
       return;
     }
@@ -263,6 +296,12 @@ class Game {
     this.updateCamera(dt); this.updateFx(dt);
   }
 
+  onStart() {
+    const S = this.stage;
+    if (!S || S.id === '1-1' || Save.d.games === 0) this.tip('move');
+    if (this.gemsOn) this.tip('gems');
+    if (this.boss) setTimeout(() => { if (!this.over) this.ui.banner(`${this.boss.name} APPEARS!`, 'Smash its Math Shield with 🧠 (Q), then attack!', '#ff6b6b', 2.4); }, 1500);
+  }
   playerIntent(f) {
     const I = this.input, it = { mx: I.mx, my: I.my, aim: null, fire: false, sup: false, tx: null, ty: null };
     if (this.phase !== 'play') { it.mx = it.my = 0; return it; }
@@ -298,7 +337,9 @@ class Game {
     f.flash = Math.max(0, f.flash - dt); f.recoil = Math.max(0, f.recoil - dt * 5); f.invuln = Math.max(0, f.invuln - dt); f.revealT -= dt; f.squash *= Math.pow(0.02, dt);
     if (f.ammo < 3) f.ammo = Math.min(3, f.ammo + dt / d.atk.reload);
     if (!d.boss && !d.minion && this.time - f.lastHurt > 3 && this.time - f.lastShot > 3 && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.13 * dt);
-    if (f.super >= 1 && !f.superAnnounced) { f.superAnnounced = true; if (f.isPlayer) { Sound.play('ready'); this.ui.superReady(); } }
+    if (f.vuln > 0) f.vuln -= dt;
+    if (!f.shield && f.shieldT > 0) { f.shieldT -= dt; if (f.shieldT <= 0) { f.shield = true; if (f === this.boss || dist(f.x, f.y, this.player.x, this.player.y) < 10 * T) { this.ui.banner('SHIELD IS BACK!', 'Smash it again with 🧠', '#9ffcff', 1.4); Sound.play('rule'); } } }
+    if (f.super >= 1 && !f.superAnnounced) { f.superAnnounced = true; if (f.isPlayer) { Sound.play('ready'); this.ui.superReady(); this.tip('super'); } }
     // scheduled burst shots
     while (f.burstQ.length && f.burstQ[0].t <= this.time) { const s = f.burstQ.shift(); this.shoot(f, s.ang, d.atk, s.dmg); Sound.play('shoot', 1 + Math.random() * 0.1); }
     if (f.dash) { this.updateDash(f, dt); return; }
@@ -354,7 +395,7 @@ class Game {
     for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++) {
       const a = fs[i], b = fs[j]; if (!a.alive || !b.alive || a.leap || b.leap) continue;
       const dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy, m = a.r + b.r - 6;
-      if (d2 < m * m && d2 > 0.01) { const d = Math.sqrt(d2), p = (m - d) * 0.5; a.x -= dx / d * p; a.y -= dy / d * p; b.x += dx / d * p; b.y += dy / d * p; this.collide(a); this.collide(b); }
+      if (d2 < m * m && d2 > 0.01 && !(a.structure && b.structure)) { const d = Math.sqrt(d2), p = m - d, ka = a.structure ? 0 : b.structure ? 1 : 0.5, kb = 1 - ka; a.x -= dx / d * p * ka; a.y -= dy / d * p * ka; b.x += dx / d * p * kb; b.y += dy / d * p * kb; this.collide(a); this.collide(b); }
     }
   }
 
@@ -431,7 +472,7 @@ class Game {
       for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) { const t = this.tileAt(tx, ty); if ((t === TL.WALL || t === TL.BLOCK || t === TL.CRATE) && tx >= 0 && ty >= 0 && tx < this.w && ty < this.h && dist((tx + 0.5) * T, (ty + 0.5) * T, f.x, f.y) < tr + T * 0.3) this.breakTile(tx, ty, f); }
     }
   }
-  knock(e, ang, d) { if (!e.alive) return; this.moveFighter(e, Math.cos(ang) * d, Math.sin(ang) * d); }
+  knock(e, ang, d) { if (!e.alive || e.structure) return; this.moveFighter(e, Math.cos(ang) * d, Math.sin(ang) * d); }
   nearestOpen(x, y) {
     let tx = clamp(Math.floor(x / T), 0, this.w - 1), ty = clamp(Math.floor(y / T), 0, this.h - 1);
     if (!this.walkSolid(tx, ty)) return { x: clamp(x, tx * T + 26, tx * T + T - 26), y: clamp(y, ty * T + 26, ty * T + T - 26) };
@@ -495,23 +536,24 @@ class Game {
   }
   damage(f, amt, src, o = {}) {
     if (!f.alive || f.invuln > 0 || f.leap || amt <= 0) return;
+    let crit = false;
     if (f.shield) {
-      amt *= 0.12;
-      if (src && src.isPlayer && !this.shieldHint) { this.shieldHint = true; this.ui.banner('MATH SHIELD!', 'It blocks most damage. Press Q or the 🧠 button and solve a problem to break it!', '#9ffcff', 3.2); }
-    }
+      amt *= 0.2;
+      if (src && src.isPlayer && !this.shieldHint) { this.shieldHint = true; this.ui.banner('MATH SHIELD!', 'It blocks most damage. Press Q or 🧠 and solve a problem to smash it!', '#9ffcff', 3); }
+    } else if (f.vuln > 0) { amt *= 1.25; crit = true; }
     amt = Math.round(amt); f.hp -= amt; f.flash = 0.1; f.lastHurt = this.time; f.revealT = Math.max(f.revealT, 0.8);
     if (src && src !== f) {
       if (!o.isSuper) src.super = Math.min(1, src.super + amt / src.def.superCharge);
       src.stats.dmg += amt;
     }
     const mine = src && src.isPlayer, me = f.isPlayer;
-    this.texts.push({ x: f.x + rand(-12, 12), y: f.y - 70 * (f.def.scale || 1), text: (f.shield ? '🛡' : '') + amt, color: f.shield ? '#9ffcff' : me ? '#ff5b5b' : mine ? '#ffffff' : '#ffe9b0', size: mine || me ? 22 : 16, life: 0.9, max: 0.9, vy: -70 });
+    this.texts.push({ x: f.x + rand(-12, 12), y: f.y - 70 * (f.def.scale || 1), text: (f.shield ? '🛡' : '') + amt + (crit ? '!' : ''), color: f.shield ? '#9ffcff' : crit ? '#ffd23f' : me ? '#ff5b5b' : mine ? '#ffffff' : '#ffe9b0', size: crit ? 27 : mine || me ? 22 : 16, life: 0.9, max: 0.9, vy: -70 });
     if (mine) Sound.play('hit');
     if (me) { Sound.play('hurt'); this.cam.shake = Math.max(this.cam.shake, 5); }
     if (f.hp <= 0) {
       if (me && this.mode === 'royale' && !this.secondUsed) {
         this.secondUsed = true; f.hp = 1; f.invuln = 0.5;
-        this.ui.quiz('second', ok => { if (ok) { f.hp = Math.round(f.maxHp * 0.5); f.invuln = 2.5; this.float(f, 'BACK IN THE FIGHT!', '#7dff6a', 24); this.puff(f.x, f.y, 10, 'rgba(160,255,140,0.9)'); } else this.kill(f, src); });
+        this.ui.quiz('second', (ok, fast, retry) => { if (ok) { f.hp = Math.round(f.maxHp * (retry ? 0.35 : 0.5)); f.invuln = 2.5; this.float(f, 'BACK IN THE FIGHT!', '#7dff6a', 24); this.puff(f.x, f.y, 10, 'rgba(160,255,140,0.9)'); } else this.kill(f, src); });
         return;
       }
       this.kill(f, src);
@@ -525,19 +567,28 @@ class Game {
     this.puff(f.x, f.y - 20, 14, 'rgba(255,255,255,0.95)');
     for (let k = 0; k < 10; k++) this.parts.push({ type: 'star', x: f.x, y: f.y - 30, vx: rand(-260, 260), vy: rand(-320, 60), life: rand(0.6, 1), max: 1, size: rand(6, 11), color: choice(['#ffd23f', '#fff', f.def.color]), rot: rand(0, 6), vr: rand(-10, 10), grav: 500 });
     this.ui.feed(src && src !== f ? src.name : this.mode === 'royale' ? 'The poison' : 'A trap gem', f.name, this.relColor(src), this.relColor(f));
+    for (let i = 0; i < f.cubesHeld; i++) { const a = rand(0, TAU); this.cubes.push({ x: f.x + Math.cos(a) * 30, y: f.y + Math.sin(a) * 30, z: 0, vz: 360, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, age: 0, alive: true }); }
+    f.cubesHeld = 0;
+    if (src && src.isPlayer && f !== src) this.koStreak(src);
     if (this.mode === 'solo') {
       for (let i = 0; i < f.gems; i++) this.dropGem(f.x, f.y, null);
       f.gems = 0;
       if (f.isPlayer) {
         this.lives--;
         if (this.lives > 0) { f.respawnT = 3; this.ui.playerDown(true); }
+        else if (!this.continueUsed) { this.continueUsed = true; this.continueT = 1.4; this.ui.playerDown(false); this.ui.banner('OUT OF LIVES!', 'Solve one problem to keep going!', '#ff9f1c', 1.6, true); }
         else { this.ui.playerDown(false); this.endSoon({ outcome: 'fail', why: 'You ran out of lives.' }, 1.8); }
       } else {
         this.kills++;
         if (f.def.boss) {
-          this.cam.shake = 16; this.explode(f.x, f.y, 3 * T, 0, f, { big: true, color: '#ffd23f' });
+          this.cam.shake = 16; this.slow = 1.4; this.explode(f.x, f.y, 3 * T, 0, f, { big: true, color: '#ffd23f' });
           for (const e of this.fighters) if (e.alive && e !== f && e.team === f.team) this.kill(e, src);
           this.ui.banner('BOSS DEFEATED!', 'You did it!', '#ffd23f', 2.5, true); this.endSoon({ outcome: 'clear' }, 2.4);
+        } else if (f.structure) {
+          this.factoriesDown++; this.slow = Math.max(this.slow, 0.5); this.cam.shake = 12;
+          this.explode(f.x, f.y, 2 * T, 0, f, { big: true, color: '#ff9f1c' });
+          const left = this.factories.length - this.factoriesDown;
+          if (left > 0) this.ui.banner('FACTORY DESTROYED!', `${left} to go`, '#ff9f1c', 1.6);
         } else if (this.stage.dropCube && Math.random() < this.stage.dropCube) this.cubes.push({ x: f.x, y: f.y, z: 0, vz: 360, age: 0, alive: true });
       }
     } else if (this.mode === 'grab') {
@@ -553,6 +604,12 @@ class Game {
     }
     if (src && src.isPlayer) { this.cam.shake = Math.max(this.cam.shake, 6); }
   }
+  koStreak(p) {
+    this.koTimes = this.koTimes.filter(t => this.time - t < 2.6); this.koTimes.push(this.time);
+    const n = this.koTimes.length; if (n < 2) return;
+    this.texts.push({ x: p.x, y: p.y - 175, text: n === 2 ? 'DOUBLE KO!' : n === 3 ? 'TRIPLE KO!' : 'UNSTOPPABLE!', color: n >= 3 ? '#ff8be6' : '#ffd23f', size: 30 + 3 * Math.min(n, 4), life: 1.6, max: 1.6, vy: -30 });
+    Sound.play('rule', 1 + n * 0.1); p.super = Math.min(1, p.super + 0.15);
+  }
   relColor(f) { if (!f) return '#7dff6a'; if (f.isPlayer) return '#ffd23f'; return f.team === this.player.team ? '#5ec8ff' : '#ff6b6b'; }
   powerUp(f, txt) {
     f.power++; const old = f.maxHp; f.maxHp = Math.round(f.baseHp * (1 + 0.1 * f.power)); f.hp = Math.min(f.maxHp, f.hp + (f.maxHp - old) + 800);
@@ -563,7 +620,7 @@ class Game {
   finish(res) {
     if (this.over) return; this.over = true;
     const p = this.player;
-    Object.assign(res, { time: Math.round(this.playTime), deaths: p.stats.deaths, traps: this.traps, hp: p.alive ? p.hp / p.maxHp : 0, stage: this.stage ? this.stage.id : null });
+    Object.assign(res, { time: Math.round(this.playTime), deaths: p.stats.deaths, traps: this.traps, hp: p.alive ? p.hp / p.maxHp : 0, gems: p.stats.gems, kos: p.stats.ko, stage: this.stage ? this.stage.id : null });
     this.ui.end(res);
   }
 
@@ -582,15 +639,16 @@ class Game {
       if (gm.num != null && gm.age > 22) { gm.alive = false; this.puff(gm.x, gm.y - 10, 3, 'rgba(210,170,255,0.8)'); continue; }
       if (gm.age < 0.5) continue;
       for (const f of this.fighters) {
-        if (!f.alive || f.leap || (this.mode === 'solo' && !f.isPlayer && !this.stage.botsTakeGems)) continue;
-        if ((f.x - gm.x) ** 2 + (f.y - gm.y) ** 2 < (f.r + 16) ** 2) { this.takeGem(f, gm); break; }
+        if (!f.alive || f.leap || f.structure || (this.mode === 'solo' && !f.isPlayer && !this.stage.botsTakeGems)) continue;
+        const rr = f.r + (gm.num == null || this.rule.f(gm.num) ? 16 : 4);
+        if ((f.x - gm.x) ** 2 + (f.y - gm.y) ** 2 < rr * rr) { this.takeGem(f, gm); break; }
       }
     }
     this.gems = this.gems.filter(g => g.alive);
     for (const c of this.cubes) {
-      phys(c); if (c.age < 0.45) continue;
+      phys(c); if (c.age < 0.45 || c.z > 6) continue;
       for (const f of this.fighters) {
-        if (!f.alive || f.leap) continue;
+        if (!f.alive || f.leap || f.structure || (this.mode === 'solo' && !f.isPlayer)) continue;
         if ((f.x - c.x) ** 2 + (f.y - c.y) ** 2 < (f.r + 18) ** 2) { this.takeCube(f, c); break; }
       }
     }
@@ -602,7 +660,11 @@ class Game {
     if (good) {
       f.gems++; f.stats.gems++;
       for (let k = 0; k < 8; k++) this.parts.push({ type: 'star', x: gm.x, y: gm.y - 20, vx: rand(-80, 80), vy: rand(-220, -80), life: 0.6, max: 0.6, size: rand(4, 7), color: gm.num == null ? '#ffe066' : '#d9a6ff', rot: 0, vr: 6, grav: 200 });
-      if (f.isPlayer) { Sound.play('gem'); this.float(f, gm.num == null ? '+1 GEM' : `+1  ✓ ${gm.num}`, '#d9a6ff', 20); }
+      if (f.isPlayer) {
+        Sound.play('gem'); this.float(f, gm.num == null ? '+1 GEM' : `+1  ✓ ${gm.num}`, '#d9a6ff', 20);
+        this.gemCombo = this.gemCombo.filter(t => this.time - t < 3.5); this.gemCombo.push(this.time);
+        if (this.gemCombo.length >= 3) { this.gemCombo = []; f.super = Math.min(1, f.super + 0.3); this.texts.push({ x: f.x, y: f.y - 180, text: 'GEM COMBO! +SUPER', color: '#ff8be6', size: 28, life: 1.5, max: 1.5, vy: -30 }); Sound.play('cube'); }
+      }
       else if (dist(f.x, f.y, this.player.x, this.player.y) < 9 * T) Sound.play('gem', 0.8);
     } else {
       const lost = f.gems > 0; if (lost) { f.gems--; }
@@ -615,11 +677,8 @@ class Game {
   takeCube(f, c) {
     c.alive = false;
     if (f.isPlayer) {
-      Sound.play('cube');
-      this.ui.quiz('cube', (ok, fast) => {
-        if (ok) { this.solved++; this.powerUp(f, fast ? 'GENIUS! +POWER' : 'POWER UP!'); f.super = Math.min(1, f.super + (fast ? 0.6 : 0.4)); }
-        else this.float(f, 'The cube fizzled…', '#ccc', 18);
-      });
+      f.cubesHeld++; Sound.play('cube');
+      this.float(f, '+1 BRAIN CUBE 🧊', '#ff8be6', 20); this.tip('cube');
     } else {
       if (Math.random() < f.bot.mathSkill) this.powerUp(f, 'SOLVED! +POWER');
       else this.float(f, 'Wrong answer!', '#ff9a9a', 15);
@@ -632,11 +691,13 @@ class Game {
   updateGems(dt) {
     this.mineT -= dt;
     if (this.mineT <= 0) {
-      this.mineT = (this.stage && this.stage.gemEvery) || 4.2;
-      if (this.gems.length < 14) {
+      const burst = (this.stage && this.stage.gemBurst) || 1;
+      this.mineT = ((this.stage && this.stage.gemEvery) || 4.2) * burst;
+      for (let k = 0; k < burst && this.gems.length < 14; k++) {
         const good = Math.random() < 0.56, num = BBMath.gemNumber(this.rule, good);
         this.dropGem(this.mine.x, this.mine.y, num); this.mineFlash = 0.4;
       }
+      if (burst > 1) Sound.play('gem', 0.7);
     }
     if (this.mineFlash > 0) this.mineFlash -= dt;
     this.ruleT -= dt;
@@ -659,7 +720,7 @@ class Game {
     if (this.clock <= 0 && !this.ending) { this.clock = 0; this.endSoon({ outcome: g0 > g1 ? 'win' : g1 > g0 ? 'lose' : 'draw' }, 0.3); }
   }
   updateRoyale(dt) {
-    const W = this.w * T, H = this.h * T, p = clamp((this.time - 32) / 115, 0, 1), minHalf = 2.5 * T;
+    const W = this.w * T, H = this.h * T, p = clamp((this.time - 20) / 100, 0, 1), minHalf = 2.5 * T;
     const hx = lerp(W / 2, minHalf, p), hy = lerp(H / 2, minHalf, p);
     this.safe = { x0: W / 2 - hx, y0: H / 2 - hy, x1: W / 2 + hx, y1: H / 2 + hy, p };
     if (p > 0 && !this.poisonWarned) { this.poisonWarned = true; this.ui.banner('POISON IS CLOSING IN!', 'Move toward the center', '#7dff6a', 2); }
@@ -670,7 +731,31 @@ class Game {
     }
   }
   updateSolo(dt) {
-    const S = this.stage; if (this.ending) return;
+    const S = this.stage, P = this.player; if (this.ending) return;
+    if (this.continueT > 0) {
+      this.continueT -= dt;
+      if (this.continueT <= 0) this.ui.quiz('continue', ok => {
+        if (ok) { this.lives = 1; this.respawn(P); P.invuln = 3; this.ui.banner('KEEP GOING!', 'One more life. You got this!', '#7dff6a', 1.8); }
+        else this.endSoon({ outcome: 'fail', why: 'You ran out of lives.' }, 0.6);
+      });
+      return;
+    }
+    this.tipT -= dt;
+    if (this.tipT <= 0 && P.alive) {
+      this.tipT = 0.5;
+      const tx = Math.floor(P.x / T), ty = Math.floor(P.y / T);
+      for (let y = ty - 4; y <= ty + 4; y++) for (let x = tx - 4; x <= tx + 4; x++) if (this.tileAt(x, y) === TL.CRATE && x >= 0 && y >= 0 && x < this.w && y < this.h) { this.tip('crate'); y = ty + 5; break; }
+      if (this.shieldTarget()) this.tip('shield');
+    }
+    if (S.supply) {
+      this.supplyT -= dt;
+      if (this.supplyT <= 0 && P.alive) {
+        this.supplyT = S.supply.every;
+        const a = rand(0, TAU), r = rand(2, 3.5) * T, spot = this.nearestOpen(P.x + Math.cos(a) * r, P.y + Math.sin(a) * r);
+        this.cubes.push({ x: spot.x, y: spot.y, z: 480, vz: 0, age: 0, alive: true, drop: true });
+        this.ui.banner('SUPPLY DROP!', 'A Brain Cube is falling nearby', '#ff8be6', 1.3); Sound.play('lob', 0.5);
+      }
+    }
     if (S.time) {
       this.clock -= dt;
       if (this.clock <= 0) {
@@ -683,9 +768,15 @@ class Game {
     }
     const left = this.enemiesLeft();
     if (S.waves && left === (this.boss && this.boss.alive ? 1 : 0) && this.waveIdx < S.waves.length - 1) {
+      if (this.waveIdx >= 0 && !this.waveCleared) {
+        this.waveCleared = true; this.waveT = 2.6;
+        if (P.alive) { P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.35); P.ammo = 3; this.float(P, '+HEALTH', '#7dff6a', 20); }
+        this.ui.banner('WAVE CLEARED!', P.cubesHeld ? 'Quick! Open your Brain Cubes now (Q / 🧠)' : 'Get ready for the next one…', '#7dff6a', 1.6);
+        Sound.play('ready');
+      }
       this.waveT -= dt;
       if (this.waveT <= 0) {
-        this.waveIdx++; this.waveT = 1.6;
+        this.waveIdx++; this.waveT = 1.6; this.waveCleared = false;
         for (const spec of S.waves[this.waveIdx]) for (let i = 0; i < (spec.n || 1); i++) this.spawnEnemy(spec);
         if (S.waves.length > 1) this.ui.banner(this.waveIdx === S.waves.length - 1 ? 'FINAL WAVE!' : `WAVE ${this.waveIdx + 1}`, `${S.waves[this.waveIdx].reduce((a, s) => a + (s.n || 1), 0)} robots incoming`, '#ff9f1c', 1.4);
       }
@@ -699,7 +790,12 @@ class Game {
     if (S.type === 'defeat') done = this.waveIdx === S.waves.length - 1 && this.enemiesLeft() === 0;
     else if (S.type === 'gems') done = this.player.alive && this.player.gems >= S.goal;
     else if (S.type === 'cubes') done = this.solved >= S.goal;
-    if (done) { this.ui.banner('STAGE CLEAR!', '', '#ffd23f', 2.2, true); Sound.play('win'); this.endSoon({ outcome: 'clear' }, 1.6); }
+    else if (S.type === 'factories') done = this.factories.length > 0 && this.factoriesDown >= this.factories.length;
+    if (done) {
+      if (S.type === 'factories') for (const e of this.fighters) if (e.alive && e.team !== P.team) { e.alive = false; this.puff(e.x, e.y - 20, 8, 'rgba(255,255,255,0.9)'); }
+      this.slow = Math.max(this.slow, 0.8);
+      this.ui.banner('STAGE CLEAR!', S.type === 'factories' ? 'All robots shut down!' : '', '#ffd23f', 2.2, true); Sound.play('win'); this.endSoon({ outcome: 'clear' }, 1.6);
+    }
   }
   inSafe(x, y) { const s = this.safe; return !s || (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1); }
 
@@ -739,7 +835,9 @@ class Game {
     const p = this.player, c = this.cam;
     let tx = p.x, ty = p.y - 30;
     if (this.input.mouse && this.input.aim != null && p.alive) { tx += Math.cos(this.input.aim) * 50; ty += Math.sin(this.input.aim) * 40; }
-    const b = this.boss; if (b && b.alive && p.alive) { tx += clamp((b.x - p.x) * 0.3, -170, 170); ty += clamp((b.y - p.y) * 0.35, -190, 190); }
+    let b = this.boss && this.boss.alive ? this.boss : null;
+    if (!b && this.factories) { let bd = 9 * T; for (const f of this.factories) if (f.alive) { const d = dist(f.x, f.y, p.x, p.y); if (d < bd) { bd = d; b = f; } } }
+    if (b && p.alive) { tx += clamp((b.x - p.x) * 0.3, -170, 170); ty += clamp((b.y - p.y) * 0.35, -190, 190); }
     const k = Math.min(1, dt * 7); c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
     const hw = this.vw / 2 / c.s, hh = this.vh / 2 / c.s, W = this.w * T, H = this.h * T, m = 1.4 * T;
     if (2 * hw >= W + 2 * m) c.x = W / 2; else c.x = clamp(c.x, hw - m, W - hw + m);
@@ -782,7 +880,7 @@ class Bot {
     for (const e of g.fighters) {
       if (!e.alive || e.team === f.team || !g.canSee(f.team, e)) continue;
       const d = dist(f.x, f.y, e.x, e.y); if (d > 11 * T) continue;
-      const s = d * (0.6 + 0.4 * e.hp / e.maxHp) + (e.isPlayer ? -40 : 0);
+      const s = d * (0.6 + 0.4 * e.hp / e.maxHp) + (e.isPlayer ? -10 : 0);
       if (s < bd) { bd = s; best = e; }
     }
     if (best !== this.target) { this.target = best; this.react = 0.22 + (1 - this.skill) * 0.5; }
@@ -816,7 +914,7 @@ class Bot {
       if (hpR < 0.3 && this.target && tgtD < 6 * T) { this.mode = 'flee'; const a = Math.atan2(f.y - this.target.y, f.x - this.target.x); this.goal = { x: clamp(f.x + Math.cos(a) * 5 * T, s.x0 + T, s.x1 - T), y: clamp(f.y + Math.sin(a) * 5 * T, s.y0 + T, s.y1 - T) }; return; }
       const cube = nearest(g.cubes, c => g.inSafe(c.x, c.y), 9 * T);
       if (cube && !(this.target && tgtD < 3 * T)) { this.mode = 'cube'; this.goal = { x: cube.x, y: cube.y }; return; }
-      const hurt = g.time - f.lastHurt < 2.5, eager = g.time > 45 || f.power >= 2 || hurt;
+      const hurt = g.time - f.lastHurt < 2.5, eager = g.time > 30 || f.power >= 2 || hurt;
       if (this.target && tgtD < (eager ? 8 : 4.5) * T && (hpR > 0.45 || this.target.hp < f.hp || hurt)) { this.mode = 'fight'; return; }
       const cr = this.findCrate(13);
       if (cr >= 0) { this.mode = 'crate'; this.crate = cr; return; }
@@ -912,13 +1010,12 @@ class BossAI {
   constructor(g, f, spec) {
     this.g = g; this.f = f; this.spec = spec; this.t = 2.2; this.i = 0; this.summoned = 0; this.strafe = 1; this.strafeT = 1.5; this.queue = [];
     this.beliefs = new Map(); this.mathSkill = 0;
-    f.shield = true; f.shieldT = 0; f.stun = 0;
+    f.shield = true; f.shieldT = 0; f.stun = 0; f.vuln = 0;
   }
   believes() { return false; }
   intent(dt) {
     const g = this.g, f = this.f, P = g.player, it = { mx: 0, my: 0, aim: null, fire: false, sup: false, tx: null, ty: null, aiming: true };
     if (g.phase !== 'play') return it;
-    if (!f.shield && f.shieldT > 0) { f.shieldT -= dt; if (f.shieldT <= 0) { f.shield = true; g.ui.banner('SHIELD IS BACK!', 'Solve another problem to break it', '#9ffcff', 1.6); Sound.play('rule'); } }
     for (const q of this.queue) { q.t -= dt; if (q.t <= 0) { q.fn(); q.done = true; } } this.queue = this.queue.filter(q => !q.done);
     if (f.stun > 0) { f.stun -= dt; it.aim = f.face; return it; }
     const hpR = f.hp / f.maxHp, thr = this.spec.summonAt || [0.7, 0.4];
@@ -962,6 +1059,33 @@ class BossAI {
       for (let i = 0; i < n; i++) { const a = ang + (i - (n - 1) / 2) * 0.26; g.shoot(f, a, o(460, 15, '#ff8be6', 4.5), 380 * k); g.bullets[g.bullets.length - 1].split = { n: 2, dmg: 200 * k }; }
       Sound.play('star', 0.5);
     }
+  }
+}
+
+// ---------- robot factories ----------
+// A factory never moves. It has a Math Shield and builds robots while the player is nearby.
+// spec: { hp, shieldTime, every (seconds per robot), max (robots alive per factory), spawn: [hero ids] }
+class FactoryAI {
+  constructor(g, f, spec) {
+    this.g = g; this.f = f; this.spec = spec; this.t = rand(1.5, 3); this.kids = []; this.beliefs = new Map(); this.mathSkill = 0;
+    f.shield = spec.shield !== false; f.shieldT = 0; f.vuln = 0; f.stun = 0; f.aim = f.face = Math.PI / 2;
+  }
+  believes() { return false; }
+  intent(dt) {
+    const g = this.g, f = this.f, it = { mx: 0, my: 0, aim: null, fire: false, sup: false, tx: null, ty: null, aiming: false };
+    if (g.phase !== 'play') return it;
+    if (f.stun > 0) f.stun -= dt;
+    this.kids = this.kids.filter(k => k.alive);
+    this.t -= dt;
+    if (this.t <= 0) {
+      this.t = this.spec.every || 7;
+      const P = g.player;
+      if (P.alive && dist(f.x, f.y, P.x, P.y) < 13 * T && this.kids.length < (this.spec.max || 2)) {
+        this.kids.push(g.spawnEnemy({ hero: choice(this.spec.spawn || ['robo']), hp: this.spec.kidHp || 0.8, dmg: this.spec.kidDmg || 0.8 }, { x: f.x, y: f.y + f.r + 34 }));
+        f.recoil = 1; Sound.play('lob', 0.8);
+      }
+    }
+    return it;
   }
 }
 
@@ -1053,6 +1177,20 @@ Game.prototype.render = function (ctx, W, H, dpr) {
   }
   // screen-space: low health warning
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // arrows at the screen edge pointing to goals that are off-screen (factories, the boss)
+  const goals = [];
+  if (this.boss && this.boss.alive) goals.push(this.boss);
+  if (this.factories) for (const f of this.factories) if (f.alive) goals.push(f);
+  for (const gl of goals) {
+    const sx = (gl.x - c.x) * s + W / 2, sy = (gl.y - 40 - c.y) * s + H / 2, top = 120, m = 44;
+    if (sx > m && sx < W - m && sy > top && sy < H - m) continue;
+    const ex = clamp(sx, m, W - m), ey = clamp(sy, top, H - m), ang = Math.atan2(sy - ey, sx - ex) || Math.atan2(sy - H / 2, sx - W / 2), pulse = 1 + Math.sin(t * 6) * 0.08;
+    ctx.save(); ctx.translate(ex, ey); ctx.scale(pulse, pulse);
+    ctx.save(); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(34, 0); ctx.lineTo(18, -11); ctx.lineTo(18, 11); ctx.closePath(); fs(ctx, '#ffd23f', 3); ctx.restore();
+    circ(ctx, 0, 0, 22); fs(ctx, 'rgba(15,12,40,0.85)', 3); circ(ctx, 0, 0, 22); ctx.lineWidth = 3; ctx.strokeStyle = gl.shield ? '#9ffcff' : '#ffd23f'; ctx.stroke();
+    ctx.font = '22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(gl.def.boss ? '👑' : '🏭', 0, 1);
+    ctx.restore();
+  }
   if (P.alive && P.hp / P.maxHp < 0.3) {
     const a = 0.25 + Math.sin(t * 6) * 0.1, gr = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     gr.addColorStop(0, 'rgba(255,0,0,0)'); gr.addColorStop(1, `rgba(255,0,30,${a})`); ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
@@ -1137,6 +1275,8 @@ Game.prototype.drawFighter = function (ctx, f, dpr) {
   ell(ctx, f.x, f.y, 25 * k * (f.leap ? 0.7 : 1), 9 * k * (f.leap ? 0.7 : 1)); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
   let a = f.inBush ? 0.55 : 1; if (f.invuln > 0 && !f.dash && !f.leap) a *= 0.6 + 0.4 * Math.sin(this.time * 30);
   ctx.globalAlpha = a; ctx.drawImage(f.sprite, f.x - FX, f.y - FY - f.z, SW, SH); ctx.globalAlpha = 1;
+  if (f.vuln > 0) { const cy = f.y - 46 * k, R = 60 * k; circ(ctx, f.x, cy, R + Math.sin(this.time * 12) * 4); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,210,63,0.8)'; ctx.stroke(); if (Math.sin(this.time * 6) > 0) txt(ctx, 'VULNERABLE!', f.x, f.y - 120 * k, 18, '#ffd23f'); }
+  else if (!f.shield && f.shieldT > 0) { const cy = f.y - 46 * k, R = 64 * k * (1 - f.shieldT / 6); if (R > 0) { circ(ctx, f.x, cy, R); ctx.fillStyle = 'rgba(120,230,255,0.10)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(160,240,255,0.5)'; ctx.stroke(); } }
   if (f.shield) {
     const cy = f.y - 46 * k, R = 64 * k, t = this.time;
     circ(ctx, f.x, cy, R); ctx.fillStyle = 'rgba(120,230,255,0.16)'; ctx.fill();

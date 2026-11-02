@@ -131,12 +131,13 @@
         <div class="ab super" id="ab-super"><div class="ab-ring" id="ab-ring"></div><span>SUPER</span><small>SPACE / R-CLICK</small></div>
         <button class="ab brainb" id="ab-brain"><span class="emo">🧠</span><span id="ab-brain-txt">BRAIN CHARGE</span><small id="ab-brain-sub">Q KEY</small></button>
       </div>
-      <div id="keys-hint">WASD move · mouse aim · click shoot · SPACE super · Q brain charge</div>
+      <div id="keys-hint">WASD move · mouse aim · click shoot · SPACE super · Q = 🧠 math power</div>
       <div id="dead" class="panel">
         <div class="dead-t ol">KNOCKED OUT!</div>
         <div class="dead-s" id="dead-s">Respawning in 5…</div>
         <button class="btn green" id="btn-revive"><span>🧠 SOLVE TO RESPAWN NOW</span></button>
       </div>
+      <div id="tip"></div>
       <div id="rotate-hint">Turn your phone sideways for the best view ↻</div>
     </section>
 
@@ -162,7 +163,8 @@
     <!-- MODALS -->
     <div id="m-mode" class="modal"><div class="mbox panel">
       <h3 class="ol">CHOOSE A MODE</h3>
-      <div class="cards">
+      <div class="cards three">
+        <button class="mcard adv" data-mode="adventure"><div class="mc-ico">🗺️</div><b class="ol">ADVENTURE</b><small>Stages · bosses · stars</small><p>Play the stages in order, earn up to 3 ⭐ each, beat the bosses and unlock new heroes.</p></button>
         <button class="mcard grab" data-mode="grab"><div class="mc-ico">💎</div><b class="ol">NUMBER GRAB</b><small>3 vs 3</small><p>A math RULE shows at the top. Grab gems whose number fits it. Wrong gems are traps! Hold 10 gems for 15 seconds to win.</p></button>
         <button class="mcard roy" data-mode="royale"><div class="mc-ico">☠️</div><b class="ol">BRAIN ROYALE</b><small>Solo · 6 players</small><p>Smash <b>?</b> crates, solve the Brain Cube problems for POWER, and be the last one standing as the poison closes in.</p></button>
       </div>
@@ -181,8 +183,8 @@
       <div class="how-grid">
         <div class="how-c"><div class="how-i">🎮</div><b>Controls</b><p><span class="desk">WASD to move, aim with the mouse, click to shoot. <b>SPACE</b> or right-click for your SUPER.</span><span class="mob">Left thumb moves. Right thumb: drag to aim, let go to shoot (tap = auto-aim). Yellow button = SUPER.</span></p></div>
         <div class="how-c"><div class="how-i">💎</div><b>Number Grab</b><p>The <b>RULE</b> at the top (like PRIMES) changes every 35 s. Only grab gems that fit it. Wrong gems zap you and cost a gem!</p></div>
-        <div class="how-c"><div class="how-i">❓</div><b>Brain Cubes</b><p>Break purple <b>?</b> crates. Grab the cube and solve a math problem for +10% health and damage.</p></div>
-        <div class="how-c"><div class="how-i">🧠</div><b>Brain Charge</b><p>Press <b>Q</b> (or the 🧠 button) any time: solve a problem to fully charge your SUPER.</p></div>
+        <div class="how-c"><div class="how-i">❓</div><b>Brain Cubes</b><p>Smash purple <b>?</b> crates to pocket Brain Cubes. Open them with <b>🧠 (Q)</b> whenever you like: solve the problem for +10% health and damage.</p></div>
+        <div class="how-c"><div class="how-i">🧠</div><b>The 🧠 button</b><p>One button for math power: it smashes a nearby Math Shield, opens a Brain Cube, or charges your SUPER. Missed? You get one more try.</p></div>
         <div class="how-c"><div class="how-i">💫</div><b>Comebacks</b><p>Knocked out? Solve a problem to respawn instantly. In Royale you get one Second Chance.</p></div>
         <div class="how-c"><div class="how-i">🗺️</div><b>Adventure</b><p>Play stages one by one, earn up to 3 ⭐ each, and beat the bosses. Progress is saved to the cloud.</p></div>
         <div class="how-c"><div class="how-i">✏️</div><b>Scratch pad</b><p>Hard problem? Open the scratch pad and work it out. The game is paused while you think.</p></div>

@@ -64,7 +64,7 @@ const Cloud = {
       if (P.trophies != null) d.trophies = num(P.trophies, 0, 1e6);
       if (typeof P.hero === 'string' && HERO_ORDER.includes(P.hero)) d.hero = P.hero;
       if (P.level != null) d.level = num(P.level, 1, 5);
-      if (P.mode === 'grab' || P.mode === 'royale') d.mode = P.mode;
+      if (P.mode === 'grab' || P.mode === 'royale' || P.mode === 'adventure') d.mode = P.mode;
       for (const k of ['asked', 'correct', 'wins', 'games', 'bestStreak']) if (P[k] != null) d[k] = num(P[k], 0, 1e9);
       if (P.lv && typeof P.lv === 'object') { const lv = {}; for (const k of ['1', '2', '3', '4', '5']) { const x = P.lv[k]; if (x && typeof x === 'object') lv[k] = { a: num(x.a, 0, 1e9), c: num(x.c, 0, 1e9) }; } d.lv = lv; }
       if (typeof P.seenHow === 'boolean') d.seenHow = P.seenHow;
