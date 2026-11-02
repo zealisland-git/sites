@@ -1,4 +1,4 @@
-/* Brain Blast Arena: AMC 8 style problem generators + gem rules.
+/* Brain Blast Arena: math problem generators + gem rules.
    Every problem is generated fresh, so the answers are computed, not typed in. */
 (function (global) {
   'use strict';
@@ -35,7 +35,7 @@
   const G = [];
   const add = (lv, topic, f) => G.push({ lv, topic, f });
 
-  // ===== LEVEL 1 (like AMC 8 #1-5) =====
+  // ===== LEVEL 1 (warm-up) =====
   add(1, 'Order of operations', () => {
     const a = R(2, 12), b = R(2, 9), c = R(2, 9), d = R(2, 6), e = d * R(2, 7);
     const ans = a + b * c - e / d;
@@ -110,7 +110,7 @@
       why: `${fr(f2[0], f2[1])} of ${base} is ${mid}. Then ${fr(f1[0], f1[1])} of ${mid} is ${ans}.` };
   });
 
-  // ===== LEVEL 2 (like AMC 8 #6-10) =====
+  // ===== LEVEL 2 =====
   add(2, 'LCM', () => {
     const [a, b] = pick([[12, 18], [8, 12], [10, 15], [6, 14], [9, 12], [15, 20], [16, 24], [14, 21], [12, 20], [18, 24], [20, 30], [6, 10]]), L = lcm(a, b);
     return { q: `Bus A leaves the station every ${a} minutes and Bus B every ${b} minutes. Both leave together at 8:00 AM. How many minutes later will they next leave together?`, a: L,
@@ -203,7 +203,7 @@
       w: [x, k * x, (k + 1) * x + a, r - a, (k + 1) * (x + 1)], why: `${k}n + ${a} = ${r}, so ${k}n = ${r - a} and n = ${x}. Then ${k + 1} × ${x} = ${(k + 1) * x}.` };
   });
 
-  // ===== LEVEL 3 (like AMC 8 #11-15) =====
+  // ===== LEVEL 3 =====
   add(3, 'Divisors', () => {
     const n = pick([24, 30, 36, 40, 48, 60, 72, 84, 90, 96, 100, 108, 120, 126, 144, 150, 180, 196, 200, 210, 216, 225, 240, 252, 288, 300, 360]), d = nd(n);
     const f = pf(n);
@@ -337,7 +337,7 @@
       w: [s2 * t, D / 2, s1 * t + 5, s1, s1 * t - 5], why: `Together they close ${s1 + s2} miles each hour, so they meet after ${D} ÷ ${s1 + s2} = ${t} h. The first rides ${s1} × ${t} = ${s1 * t} miles.` };
   });
 
-  // ===== LEVEL 4 (like AMC 8 #16-20) =====
+  // ===== LEVEL 4 =====
   add(4, 'Grid paths', () => {
     const m = R(2, 6), n = R(2, 6), ans = C(m + n, m);
     return { q: `A bug walks along the lines of a ${m} × ${n} grid of squares (${m} squares wide, ${n} tall), from the bottom-left corner to the top-right corner, moving only right or up. How many different paths can it take?`, a: ans,
@@ -444,7 +444,7 @@
       why: `Count the numbers WITHOUT a ${d}, then subtract. ${N - ans} numbers from 1 to ${N} have no ${d}, so ${N} − ${N - ans} = ${ans} do.` };
   });
 
-  // ===== LEVEL 5 (like AMC 8 #21-25) =====
+  // ===== LEVEL 5 (hardest) =====
   add(5, 'Digit patterns', () => {
     const k = R(2, 5), inc = Math.random() < 0.5, ans = inc ? C(9, k) : C(10, k);
     const ex = inc ? ['', '', '37', '147', '2489', '13579'][k] : ['', '', '72', '941', '8530', '97420'][k];
@@ -662,11 +662,11 @@
   }
 
   const LEVELS = [
-    { n: 1, name: 'WARM-UP', amc: 'AMC 8 #1–5', color: '#5be35b', time: 35 },
-    { n: 2, name: 'ROOKIE', amc: 'AMC 8 #6–10', color: '#38c6ff', time: 45 },
-    { n: 3, name: 'PRO', amc: 'AMC 8 #11–15', color: '#ffd23f', time: 60 },
-    { n: 4, name: 'ELITE', amc: 'AMC 8 #16–20', color: '#ff8c42', time: 80 },
-    { n: 5, name: 'LEGEND', amc: 'AMC 8 #21–25', color: '#ff5ad8', time: 100 },
+    { n: 1, name: 'WARM-UP', desc: 'Quick warm-ups', color: '#5be35b', time: 35 },
+    { n: 2, name: 'ROOKIE', desc: 'Two-step problems', color: '#38c6ff', time: 45 },
+    { n: 3, name: 'PRO', desc: 'Tricky problems', color: '#ffd23f', time: 60 },
+    { n: 4, name: 'ELITE', desc: 'Hard puzzles', color: '#ff8c42', time: 80 },
+    { n: 5, name: 'LEGEND', desc: 'Toughest puzzles', color: '#ff5ad8', time: 100 },
   ];
 
   global.BBMath = { make, pickRule, gemNumber, LEVELS, topics, ruleNames, _G: G, _finalize: finalize };

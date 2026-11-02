@@ -71,7 +71,7 @@ function refreshLobby() {
   $('#lb-advstars').textContent = `⭐ ${totalStars()} / ${STAGES.length * 3}`;
   $('#lb-acc').textContent = d.asked ? Math.round(100 * d.correct / d.asked) + '%' : '–';
   $('#lb-name').textContent = h.name; $('#lb-title').textContent = `${h.title} · ${h.role}`;
-  $('#lb-stars').textContent = '★'.repeat(d.level); $('#lb-lvname').textContent = L.name; $('#lb-lvamc').textContent = L.amc;
+  $('#lb-stars').textContent = '★'.repeat(d.level); $('#lb-lvname').textContent = L.name; $('#lb-lvdesc').textContent = L.desc;
   $('#btn-level').style.background = `linear-gradient(${L.color}, #3b4fb5)`;
   const grab = d.mode === 'grab';
   $('#lb-mode').textContent = grab ? 'NUMBER GRAB' : 'BRAIN ROYALE'; $('#lb-modesub').textContent = grab ? '3 vs 3' : 'Solo · 6 players'; $('#lb-modeico').textContent = grab ? '💎' : '☠️';
@@ -97,7 +97,7 @@ function buildLevels() {
   LV.forEach(L => {
     const st = Save.d.lv[L.n], acc = st && st.a ? `${Math.round(100 * st.c / st.a)}% of ${st.a}` : 'not tried yet';
     const b = document.createElement('button'); b.className = 'lvcard' + (Save.d.level === L.n ? ' sel' : ''); b.style.background = `linear-gradient(#fff, ${L.color})`;
-    b.innerHTML = `<span class="st">${'★'.repeat(L.n)}</span><b>${L.name}</b><small>${L.amc}</small><span class="bonus">+${(L.n - 1) * 2} 🏆 per win</span><span class="accy">${acc}</span>`;
+    b.innerHTML = `<span class="st">${'★'.repeat(L.n)}</span><b>${L.name}</b><small>${L.desc}</small><span class="bonus">+${(L.n - 1) * 2} 🏆 per win</span><span class="accy">${acc}</span>`;
     b.onclick = () => { click(); Save.d.level = L.n; Save.save(); modal('m-level', false); refreshLobby(); };
     box.appendChild(b);
   });
@@ -155,8 +155,8 @@ function startMatch(stage) {
   } else if (grab) { $('#vs-a').innerHTML = g.fighters.filter(f => f.team === 0).map(card).join(''); $('#vs-b').innerHTML = g.fighters.filter(f => f.team === 1).map(card).join(''); }
   else { $('#vs-a').innerHTML = g.fighters.slice(0, 3).map(card).join(''); $('#vs-b').innerHTML = g.fighters.slice(3).map(card).join(''); }
   const L = LV[level - 1];
-  $('#vs-sub').innerHTML = stage ? `🎯 ${esc(stageGoalText(stage))} · Math: <b style="color:${L.color}">${L.name}</b> (${L.amc})`
-    : `Map: ${grab ? 'Crystal Canyon' : 'Brain Jungle'} · Math level: <b style="color:${L.color}">${L.name}</b> (${L.amc})`;
+  $('#vs-sub').innerHTML = stage ? `🎯 ${esc(stageGoalText(stage))} · Math: <b style="color:${L.color}">${L.name}</b> (${L.desc})`
+    : `Map: ${grab ? 'Crystal Canyon' : 'Brain Jungle'} · Math level: <b style="color:${L.color}">${L.name}</b> (${L.desc})`;
   show('vs'); Music.start('battle');
   requestAnimationFrame(() => $$('#vs canvas').forEach(c => paintPortrait(c, c.dataset.h, { bg: false, feet: 0.88, aim: c.closest('.red') ? Math.PI - 0.35 : 0.35 })));
   clearTimeout(App.vsT); App.vsT = setTimeout(beginMatch, 2600);
@@ -343,7 +343,7 @@ function openStageCard(st) {
   if (App.scr !== 'stages') { show('stages'); buildStages(); }
   const rec = stageRec(st.id), L = LV[st.math - 1];
   $('#si-ico').textContent = st.icon; setText('si-num', `STAGE ${st.id}`); $('#si-name').textContent = st.name.toUpperCase(); $('#si-intro').textContent = st.intro;
-  const tags = [`🎯 ${stageGoalText(st)}`, `🧠 ${L.amc} · ${L.name}`];
+  const tags = [`🎯 ${stageGoalText(st)}`, `🧠 Math LV ${L.n} · ${L.name}`];
   if (st.lives || st.type !== 'grab' && st.type !== 'royale') tags.push(`❤️ ${st.lives || 3} lives`);
   if (st.time && st.type !== 'survive') tags.push(`⏱️ ${Math.floor(st.time / 60)}:${String(st.time % 60).padStart(2, '0')}`);
   if (st.topics) tags.push(`📚 Focus: ${st.topics.slice(0, 3).join(', ')}${st.topics.length > 3 ? '…' : ''}`);
@@ -432,7 +432,7 @@ const Quiz = {
     this.lvl = lvl; this.q = BBMath.make(lvl, g && g.stage ? g.stage.topics : null); this.limit = kind === 'gym' ? 0 : L.time; this.t0 = performance.now(); this.elapsedPaused = 0;
     if (App.game) { App.game.paused = true; resetHeld(); }
     const K = KINDS[kind];
-    $('.qhead').className = 'qhead ' + K.cls; $('#q-badge').textContent = K.badge; $('#q-level').textContent = `${L.amc} · ${L.name}`;
+    $('.qhead').className = 'qhead ' + K.cls; $('#q-badge').textContent = K.badge; $('#q-level').textContent = `LV ${L.n} · ${L.name}`;
     $('#q-reward').innerHTML = K.reward; $('#q-topic').textContent = this.q.topic;
     $('#q-text').innerHTML = this.q.q;
     const box = $('#q-choices'); box.className = 'qchoices'; box.innerHTML = '';

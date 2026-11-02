@@ -19,7 +19,7 @@
        'boss'    defeat the `boss` (break its Math Shield by solving problems)
        'grab'    a 3 vs 3 Number Grab match (win it)
        'royale'  a 6-player Brain Royale (finish in the top `clearRank`)
-   math                          - problem level 1-5 (1 = AMC 8 #1-5 ... 5 = AMC 8 #21-25)
+   math                          - problem level 1-5 (1 = easiest warm-ups ... 5 = toughest puzzles)
    topics (optional)             - only ask these problem topics (see BBMath.topics())
    rules, ruleLevel (optional)   - gem rules to use (see BBMath.ruleNames())
    time                          - seconds allowed (0 = no limit). For 'survive' it is the goal.
