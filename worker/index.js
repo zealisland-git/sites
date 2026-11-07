@@ -10,8 +10,10 @@
 // Keys and codes are only stored as SHA-256 hashes.
 //
 // /api/brain-blast/* saves Brain Blast Arena progress: see brain-blast.js.
+// /api/amc8/* keeps the online copy of the AMC 8 Prep site's practice results: see amc8.js.
 
 import { brainBlast } from './brain-blast.js';
+import { amc8 } from './amc8.js';
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -226,6 +228,9 @@ export default {
         return fail(500, 'Something went wrong on the server. Your progress is still saved on this device.');
       }
     }
+    // amc8() catches its own errors, so every answer carries the CORS headers the AMC 8 site needs
+    const a8 = /^\/api\/amc8\/(.+)$/.exec(url.pathname);
+    if (a8) return amc8(request, env, a8[1].replace(/\/+$/, ''));
     if (url.pathname.startsWith('/api/')) return fail(404, 'Unknown API.');
     // Anything else: serve the static site as usual.
     return env.ASSETS.fetch(request);

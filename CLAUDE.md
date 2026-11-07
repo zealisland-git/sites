@@ -46,7 +46,13 @@ Do not touch other sites' folders unless asked.
   math content in `public/brain-blast/content.js`, which `tools/brain-blast/import-content.mjs` makes
   from the content Markdown file; run `tools/brain-blast/check-content.mjs` on that file before publishing).
   The game must not name any math contest anywhere.
-- Pages call the API with relative URLs, e.g. `new URL('../api/ascii-art/', location.href)`.
+  The AMC 8 Prep site (its own repo `zealisland-git/amc8`, served at `https://amc8.zeal-island.workers.dev`)
+  saves practice results through `/api/amc8/` (code in `worker/amc8.js`, tables `amc8_students`,
+  `amc8_devices`, `amc8_tries`, `amc8_gone`). It is the one API called from another origin, so it
+  sends CORS headers for that origin only. Test it with `node tools/amc8/test-api.mjs`;
+  `tools/amc8/dev-server.mjs` runs it locally for a browser test.
+- Pages call the API with relative URLs, e.g. `new URL('../api/ascii-art/', location.href)`
+  (the AMC 8 site, on another origin, uses the full URL).
 - API responses must send `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store`
   (`_headers` only covers static files).
 - Stay inside the Workers Free plan: 100,000 Worker requests/day, 10 ms CPU per request
